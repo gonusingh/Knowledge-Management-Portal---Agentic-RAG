@@ -1,0 +1,48 @@
+# ==============================================================================
+# ENTERPRISE AGENTIC RAG - REQUIREMENTS (Local, No GCP)
+# ==============================================================================
+# --- CORE API & WEB FRAMEWORK ---
+fastapi
+uvicorn[standard]
+python-dotenv
+requests
+streamlit
+numpy
+pytz
+nest-asyncio
+# --- GEMINI EMBEDDINGS ---
+google-generativeai
+langchain-google-genai
+# --- VECTOR DB & RETRIEVAL ---
+qdrant-client
+flashrank
+# --- LANGCHAIN & AGENTIC ORCHESTRATION ---
+langchain
+langgraph
+langchain-groq
+langchain-google-vertexai
+langchain-community
+langchain-openai
+pydantic>=2.0.0
+# --- DATA INGESTION & DOCUMENT PARSING ---
+unstructured
+python-pptx
+python-docx
+pypdf
+beautifulsoup4
+pdfplumber
+# --- OBSERVABILITY & DISTRIBUTED TRACING ---
+langsmith
+logfire[fastapi,requests]
+loguru
+# --- GUARDRAILS ---
+nemoguardrails
+langchain-nvidia-ai-endpoints
+# --- LLM GATEWAY ---
+portkey-ai
+# --- EVALUATION (EVALS) ---
+ragas
+deepeval
+langfuse
+# --- EMBEDDINGS (SENTENCE TRANSFORMERS, used internally by FlashRank) ---
+sentence-transformers

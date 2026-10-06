@@ -1,0 +1,27 @@
+# app/guardrails/guardrails_config/config.yml
+#
+# Tells NeMo Guardrails which LLM to use for its OWN self-check calls,
+# and which rail types (Concept 3: input, dialog, retrieval, execution,
+# output) are actually turned on for this project.
+
+models:
+  - type: main
+    engine: groq
+    model: openai/gpt-oss-safeguard-20b
+    api_key_env_var: GROQ_API_KEY
+    # Deliberately using the SMALLER/cheaper model for guardrail checks,
+    # not the main 120B model your Responder node uses. A safety
+    # yes/no judgment doesn't need the biggest model, and keeping this
+    # separate avoids adding heavy latency to every single request
+    # (see our Piece 3 notes on the latency/cost tradeoff of input rails).
+    #
+    # NeMo Guardrails doesn't know Groq's server address by default —
+    # Groq's API is "OpenAI-compatible" (same request shape, different
+    # server), so we point it there explicitly instead of letting it guess.
+    parameters:
+      base_url: https://api.groq.com/openai/v1
+
+rails:
+  input:
+    flows:
+      - self check input

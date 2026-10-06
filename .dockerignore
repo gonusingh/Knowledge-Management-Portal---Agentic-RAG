@@ -1,0 +1,34 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+build/
+dist/
+wheels/
+# Virtual environments
+venv/
+.venv/
+env/
+# Environment & secrets
+.env
+# Git & IDE
+.git/
+.gitignore
+.vscode/
+.idea/
+# Data — not needed in the container
+DATA/
+processed_data/
+# Eval suite — runs locally only
+evals/
+# Streamlit UI — deployed separately from the API
+ui/
+# Notebooks & docs — not needed at runtime
+docs/
+# OS
+.DS_Store
+Thumbs.db
+*.log

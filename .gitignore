@@ -1,0 +1,28 @@
+# Secrets — NEVER commit this
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+venv/
+.venv/
+env/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data (kept local, not pushed)
+processed_data/
+DATA/*
+!DATA/true_data/
+DATA/true_data/*
+!DATA/true_data/NimbusPay_Enterprise_Policy_Handbook_Demo.docx
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
