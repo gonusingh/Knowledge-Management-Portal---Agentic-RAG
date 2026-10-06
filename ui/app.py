@@ -37,9 +37,12 @@ if DEMO_AUTH_ENABLED and not PUBLIC_ROLE_SELECTOR:
     api_headers: dict[str, str] = {}
 elif PUBLIC_ROLE_SELECTOR:
     backend_shared_secret = str(
-        PORTAL_SECRETS.get("backend_shared_secret", "")
-        if PORTAL_SECRETS
-        else ""
+        os.getenv("BACKEND_SHARED_SECRET")
+        or (
+            PORTAL_SECRETS.get("backend_shared_secret", "")
+            if PORTAL_SECRETS
+            else ""
+        )
     )
     if not backend_shared_secret:
         st.error("Public role selection is not configured by the app owner.")
@@ -65,7 +68,10 @@ else:
         for email in portal_secrets.get("allowed_emails", [])
         if str(email).strip()
     }
-    backend_shared_secret = str(portal_secrets.get("backend_shared_secret", ""))
+    backend_shared_secret = str(
+        os.getenv("BACKEND_SHARED_SECRET")
+        or portal_secrets.get("backend_shared_secret", "")
+    )
     if not allowed_emails or not backend_shared_secret:
         st.error("Portal authentication is not fully configured by the app owner.")
         st.stop()

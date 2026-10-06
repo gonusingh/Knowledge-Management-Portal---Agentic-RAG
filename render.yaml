@@ -4,9 +4,11 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    startCommand: python scripts/start_render.py
+    healthCheckPath: /
     envVars:
+      - key: BACKEND_URL
+        value: http://127.0.0.1:8000
       - key: DEMO_AUTH_ENABLED
         value: "false"
       - key: PUBLIC_ROLE_SELECTOR

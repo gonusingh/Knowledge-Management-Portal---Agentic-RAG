@@ -581,42 +581,25 @@ These results use a small curated evaluation set and should be treated as protot
 
 The repository has been validated locally. A public production deployment is not part of the current validation evidence; the following describes the intended deployment shape.
 
-The system is two independent services plus managed Qdrant:
+The Render service runs the Streamlit UI and FastAPI backend together, plus managed Qdrant:
 
 ```text
 Streamlit UI  ->  FastAPI backend  ->  Qdrant Cloud  +  Groq / Gemini
 ```
 
-**Backend (Render)**
+**Render (UI and API)**
 
-1. In Render, create a **Blueprint** from this GitHub repository and select `render.yaml`.
+1. In Render, create or sync the **Blueprint** from this GitHub repository and select `render.yaml`.
 2. Enter the required Groq, Qdrant, Gemini and backend secret values as secret environment variables. Do not paste them into repository files.
-3. Wait for the service health check at `GET /health` to pass, then copy its public URL.
+3. Wait for the service to become **Live**, then open its public URL to use the portal. The API listens only on the service's internal loopback address.
 
-The blueprint uses Render's free plan. It may sleep when idle or run out of memory; if startup fails or the service repeatedly restarts, inspect the Render logs. The API uses `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
-
-**Frontend (Streamlit Community Cloud or any host)**
-
-1. In Streamlit Community Cloud, deploy this repository's `master` branch with `ui/app.py` as the entry point.
-2. Set `BACKEND_URL` to the Render service's public URL.
-3. Create a Google OAuth client and register the OAuth redirect URI `https://<your-app>.streamlit.app/oauth2callback`.
-4. Add the Render URL and the same backend shared secret in Streamlit's app secrets:
-
-  ```toml
-  BACKEND_URL = "https://<your-api>.onrender.com"
-
-  [portal]
-  public_role_selector = true
-  backend_shared_secret = "<same-value-as-backend-BACKEND_SHARED_SECRET>"
-  ```
-
-5. Open the Streamlit URL. The bundled handbook is restored to Qdrant if missing. Anyone with the link may select Viewer, Operator or Administrator.
+The Blueprint uses Render's free plan. It may sleep when idle or run out of memory; if startup fails or the service repeatedly restarts, inspect the Render logs. The launcher starts FastAPI on `127.0.0.1:8000`, waits for `/health`, and then starts Streamlit on Render's public port. The bundled handbook is restored to Qdrant if missing. Anyone with the link may select Viewer, Operator or Administrator.
 
 ### Before exposing it publicly
 
 - `PUBLIC_ROLE_SELECTOR=true` intentionally lets every visitor select Administrator, access confidential handbook sections, upload documents and delete documents. Do not use this mode for private or sensitive data.
-- Keep `DEMO_AUTH_ENABLED=false` on the public backend. Public role selection is separately protected from direct API calls by the shared secret held in Streamlit server-side secrets.
-- Keep the backend shared secret only in the backend host's secret settings and Streamlit's server-side secrets; never put it in browser code or commit it.
+- Keep `DEMO_AUTH_ENABLED=false` on the public backend. FastAPI listens only on the Render instance's loopback address; Streamlit sends the backend shared secret from Render's server-side environment.
+- Keep the backend shared secret only in Render's secret environment-variable settings; never put it in browser code or commit it.
 - Keep `GUARDRAIL_DEBUG_LOGGING` off.
 - Keep `.env` out of the repository and out of container images.
 - The stack is memory-heavy (guardrails, reranker and embedding SDK). Check that the chosen plan has enough RAM.
