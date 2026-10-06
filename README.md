@@ -463,20 +463,20 @@ Copy `.env.example` to `.env`. The settings model validates every field at start
 | Variable | Required | Purpose |
 |---|---|---|
 | `GROQ_API_KEY` | yes | Answer generation, guardrail models |
-| `GROQ_FALLBACK_API_KEY` | yes | Fallback key used by the Portkey routing config |
-| `PORTKEY_API_KEY` | yes | Portkey credential |
+| `GROQ_FALLBACK_API_KEY` | no | Optional fallback credential for a saved Portkey routing config |
+| `PORTKEY_API_KEY` | no | Portkey credential; not needed when calling Groq directly |
 | `PORTKEY_CONFIG` | no | Saved Portkey config ID. When unset, the app calls Groq directly. |
 | `QDRANT_API_KEY` | yes | Qdrant authentication |
 | `QDRANT_CLUSTER_ENDPOINT` | yes | Qdrant URL |
 | `GEMINI_API_KEY` | yes | Embeddings |
-| `JUDGE_GROQ` | yes | Separate Groq key for RAGAS evaluation |
+| `JUDGE_GROQ` | no | Separate Groq key for optional RAGAS evaluation |
 | `BACKEND_URL` | no | API URL used by Streamlit (defaults to localhost) |
 | `DEMO_AUTH_ENABLED` | no | Enables simulated identities for local development only; must be false in deployment |
 | `BACKEND_SHARED_SECRET` | production | Shared secret that permits the Streamlit server to call the API |
 | `PORTAL_ALLOWED_EMAILS` | production | Comma-separated Google email allowlist; each allowed account receives the Administrator role |
 | `GUARDRAIL_DEBUG_LOGGING` | no | Verbose guardrail logging. Keep it off in any shared deployment, because it logs generated answers. |
 | `MIN_RERANK_SCORE` | no | Relevance floor, default `0.01` |
-| `LANGSMITH_*`, `LOGFIRE_TOKEN` | no | Declared for future tracing; not active |
+| `LANGSMITH_*`, `LOGFIRE_TOKEN` | no | Optional observability settings; tracing is disabled by default |
 
 See also [Security notes and known limitations](#security-notes-and-known-limitations) before deploying.
 

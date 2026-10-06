@@ -15,21 +15,9 @@ services:
         value: "false"
       - key: GROQ_API_KEY
         sync: false
-      - key: GROQ_FALLBACK_API_KEY
-        sync: false
-      - key: PORTKEY_API_KEY
-        sync: false
       - key: QDRANT_API_KEY
         sync: false
       - key: QDRANT_CLUSTER_ENDPOINT
-        sync: false
-      - key: LOGFIRE_TOKEN
-        sync: false
-      - key: LANGSMITH_API_KEY
-        sync: false
-      - key: LANGSMITH_PROJECT
-        sync: false
-      - key: JUDGE_GROQ
         sync: false
       - key: GEMINI_API_KEY
         sync: false

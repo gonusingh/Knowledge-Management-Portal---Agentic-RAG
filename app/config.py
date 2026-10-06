@@ -38,10 +38,10 @@ class Settings(BaseSettings):
 
     # --- Groq (primary LLM + fallback) ---
     groq_api_key: str
-    groq_fallback_api_key: str
+    groq_fallback_api_key: str | None = None
 
     # --- Portkey LLM Gateway ---
-    portkey_api_key: str
+    portkey_api_key: str | None = None
     portkey_config: str | None = None
 
     # --- Qdrant Vector DB ---
@@ -49,13 +49,13 @@ class Settings(BaseSettings):
     qdrant_cluster_endpoint: str
 
     # --- Pydantic Logfire (observability) ---
-    logfire_token: str
+    logfire_token: str | None = None
 
     # --- LangSmith (tracing) ---
-    langsmith_tracing: bool = True   # default True if not set in .env
+    langsmith_tracing: bool = False
     langsmith_endpoint: str = "https://api.smith.langchain.com"
-    langsmith_api_key: str
-    langsmith_project: str
+    langsmith_api_key: str | None = None
+    langsmith_project: str | None = None
 
     # --- Streamlit UI -> FastAPI backend URL ---
     backend_url: str = "http://localhost:8000"
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     # --- Eval judge LLM (kept separate from groq_api_key on purpose —
     #     see our RAGAS notes: this prevents a big eval run from
     #     rate-limiting real production users) ---
-    judge_groq: str
+    judge_groq: str | None = None
 
     # --- Gemini Embeddings ---
     gemini_api_key: str
