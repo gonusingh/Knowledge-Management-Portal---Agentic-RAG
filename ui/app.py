@@ -20,7 +20,11 @@ BACKEND_URL = os.getenv("BACKEND_URL") or str(
 )
 DEMO_AUTH_ENABLED = os.getenv("DEMO_AUTH_ENABLED", "false").casefold() == "true"
 
-st.set_page_config(page_title="Knowledge Management Portal", page_icon="🛡️")
+st.set_page_config(
+    page_title="Knowledge Management Portal",
+    page_icon="🛡️",
+    initial_sidebar_state="expanded",
+)
 
 if DEMO_AUTH_ENABLED:
     demo_user = None
