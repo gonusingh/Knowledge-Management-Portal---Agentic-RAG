@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: knowledge-management-portal-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: DEMO_AUTH_ENABLED
+        value: "false"
+      - key: LANGSMITH_TRACING
+        value: "false"
+      - key: GUARDRAIL_DEBUG_LOGGING
+        value: "false"
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_FALLBACK_API_KEY
+        sync: false
+      - key: PORTKEY_API_KEY
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_CLUSTER_ENDPOINT
+        sync: false
+      - key: LOGFIRE_TOKEN
+        sync: false
+      - key: LANGSMITH_API_KEY
+        sync: false
+      - key: LANGSMITH_PROJECT
+        sync: false
+      - key: JUDGE_GROQ
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: BACKEND_SHARED_SECRET
+        sync: false
+      - key: PORTAL_ALLOWED_EMAILS
+        sync: false

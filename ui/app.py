@@ -16,8 +16,46 @@ import streamlit as st
 # Same BACKEND_URL pattern as your .env config — defaults to local dev,
 # but can point at a deployed Cloud Run URL in production.
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+DEMO_AUTH_ENABLED = os.getenv("DEMO_AUTH_ENABLED", "false").casefold() == "true"
 
 st.set_page_config(page_title="Knowledge Management Portal", page_icon="🛡️")
+
+if DEMO_AUTH_ENABLED:
+    demo_user = None
+    authenticated_email = None
+    api_headers: dict[str, str] = {}
+else:
+    if not st.user.is_logged_in:
+        st.title("Knowledge Management Portal")
+        st.write("Sign in with your authorized Google account to continue.")
+        st.button("Sign in with Google", on_click=st.login, type="primary")
+        st.stop()
+
+    authenticated_email = str(st.user.email).strip().casefold()
+    portal_secrets = st.secrets.get("portal")
+    if not portal_secrets:
+        st.error("Portal authentication is not configured by the app owner.")
+        st.stop()
+
+    allowed_emails = {
+        str(email).strip().casefold()
+        for email in portal_secrets.get("allowed_emails", [])
+        if str(email).strip()
+    }
+    backend_shared_secret = str(portal_secrets.get("backend_shared_secret", ""))
+    if not allowed_emails or not backend_shared_secret:
+        st.error("Portal authentication is not fully configured by the app owner.")
+        st.stop()
+    if authenticated_email not in allowed_emails:
+        st.error("This Google account is not authorized to use the portal.")
+        st.button("Sign out", on_click=st.logout)
+        st.stop()
+
+    demo_user = None
+    api_headers = {
+        "Authorization": f"Bearer {backend_shared_secret}",
+        "X-Authenticated-Email": authenticated_email,
+    }
 
 # Keep the visual treatment quiet and work-focused: a soft neutral canvas,
 # restrained green accents, and clear framing for the existing chat workflow.
@@ -168,22 +206,31 @@ if "active_document_version" not in st.session_state:
 # be extended by ingesting new source files into the vector store.
 with st.sidebar:
     st.subheader("🛡️ Knowledge workspace")
-    demo_user = st.selectbox(
-        "Prototype identity (local demo only)",
-        options=["alice", "bob", "carol"],
-        format_func=lambda user: {
-            "alice": "Alice · viewer",
-            "bob": "Bob · operator",
-            "carol": "Carol · administrator",
-        }[user],
-    )
-    st.caption("Demo principal — simulated RBAC identity; this selector is not production authentication.")
+    if DEMO_AUTH_ENABLED:
+        demo_user = st.selectbox(
+            "Prototype identity (local demo only)",
+            options=["alice", "bob", "carol"],
+            format_func=lambda user: {
+                "alice": "Alice · viewer",
+                "bob": "Bob · operator",
+                "carol": "Carol · administrator",
+            }[user],
+        )
+        api_headers = {"X-Demo-User": demo_user}
+        st.caption("Demo principal — simulated RBAC identity; local use only.")
+        is_administrator = demo_user == "carol"
+        active_principal = demo_user
+    else:
+        st.caption(f"Signed in as {authenticated_email}")
+        st.button("Sign out", on_click=st.logout)
+        is_administrator = True
+        active_principal = authenticated_email
 
     try:
         with st.spinner("Checking indexed documents..."):
             response = requests.get(
                 f"{BACKEND_URL}/documents",
-                headers={"X-Demo-User": demo_user},
+                headers=api_headers,
                 timeout=30,
             )
             response.raise_for_status()
@@ -241,12 +288,12 @@ with st.sidebar:
             type="primary",
             use_container_width=True,
             key="remove_active_document",
-            disabled=demo_user != "carol",
+            disabled=not is_administrator,
         ):
             try:
                 response = requests.delete(
                     f"{BACKEND_URL}/documents/{st.session_state.active_document_id}",
-                    headers={"X-Demo-User": demo_user},
+                    headers=api_headers,
                     timeout=30,
                 )
                 response.raise_for_status()
@@ -260,7 +307,7 @@ with st.sidebar:
                 st.session_state.thread_id = None
                 st.session_state.pending_refinement = None
                 st.rerun()
-        if demo_user != "carol":
+        if not is_administrator:
             st.caption("Document removal requires the Administrator role.")
 
     st.caption("Upload a source document")
@@ -276,7 +323,7 @@ with st.sidebar:
                     response = requests.post(
                         f"{BACKEND_URL}/upload",
                         files=files,
-                        headers={"X-Demo-User": demo_user},
+                        headers=api_headers,
                         timeout=60,
                     )
                     response.raise_for_status()
@@ -315,17 +362,17 @@ if "pending_refinement" not in st.session_state:
     st.session_state.pending_refinement = None
 
 identity_changed = (
-    "active_demo_user" in st.session_state
-    and st.session_state.active_demo_user != demo_user
+    "active_principal" in st.session_state
+    and st.session_state.active_principal != active_principal
 )
 if identity_changed:
     st.session_state.messages = []
     st.session_state.thread_id = None
     st.session_state.pending_refinement = None
-st.session_state.active_demo_user = demo_user
+st.session_state.active_principal = active_principal
 
 if identity_changed:
-    st.info("The conversation was cleared after switching demo users.")
+    st.info("The conversation was cleared after switching users.")
 
 
 if not st.session_state.messages:
@@ -434,7 +481,7 @@ if user_input:
                         "active_document_id": st.session_state.active_document_id,
                         "thread_id": st.session_state.thread_id,
                     },
-                    headers={"X-Demo-User": demo_user},
+                    headers=api_headers,
                     timeout=180,
                 )
                 response.raise_for_status()
@@ -503,7 +550,7 @@ def refine_answer_dialog() -> None:
                         "thread_id": st.session_state.thread_id,
                         "answer_length": answer_length,
                     },
-                    headers={"X-Demo-User": demo_user},
+                    headers=api_headers,
                     timeout=180,
                 )
                 response.raise_for_status()

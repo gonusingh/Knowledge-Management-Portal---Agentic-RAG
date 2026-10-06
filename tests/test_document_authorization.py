@@ -600,6 +600,40 @@ class DocumentAuthorizationTests(unittest.TestCase):
             401,
         )
 
+    def test_production_identity_requires_service_secret_and_allowlisted_email(self) -> None:
+        with patch.object(main_module.settings, "demo_auth_enabled", False), patch.object(
+            main_module.settings,
+            "backend_shared_secret",
+            "backend-test-secret",
+        ), patch.object(
+            main_module.settings,
+            "portal_allowed_emails",
+            "owner@example.com",
+        ):
+            user = main_module.resolve_demo_user(
+                None,
+                "Bearer backend-test-secret",
+                " OWNER@example.com ",
+            )
+            self.assertEqual(user.roles, (Role.ADMINISTRATOR,))
+            self.assertTrue(user.user_id.startswith("google-"))
+
+            with self.assertRaises(HTTPException) as wrong_secret:
+                main_module.resolve_demo_user(
+                    None,
+                    "Bearer wrong-secret",
+                    "owner@example.com",
+                )
+            self.assertEqual(wrong_secret.exception.status_code, 401)
+
+            with self.assertRaises(HTTPException) as unlisted_email:
+                main_module.resolve_demo_user(
+                    None,
+                    "Bearer backend-test-secret",
+                    "attacker@example.com",
+                )
+            self.assertEqual(unlisted_email.exception.status_code, 403)
+
     def test_conversation_checkpoint_is_scoped_to_principal_and_roles(self) -> None:
         alice_thread = scope_thread_id(
             "shared-browser-thread",

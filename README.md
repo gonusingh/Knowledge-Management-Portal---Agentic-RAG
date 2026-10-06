@@ -9,7 +9,7 @@
 
 An enterprise document question-answering portal where **the same question gets a different answer depending on who asks**. Access control is enforced inside the vector database before content reaches the language model, so restricted passages are never included in a user's authorized retrieval context, reranked evidence or LLM prompt.
 
-> **Project status: working prototype and reference implementation.** Authentication is simulated with three demo users, conversation memory is in-process, and deployment-grade persistence and observability are not wired in. See [Security notes and known limitations](#security-notes-and-known-limitations).
+> **Project status: working prototype and reference implementation.** Local authentication uses three simulated demo users; deployed mode supports Google sign-in with an email allowlist and a private UI-to-API credential. Conversation memory is in-process, and deployment-grade persistence and observability are not wired in. See [Security notes and known limitations](#security-notes-and-known-limitations).
 
 - **Original v1 project (simple RAG, still live):** https://rag-chatbot-final.streamlit.app
 - **This project's live demo:** link will be added once deployed (see [Deployment](#deployment))
@@ -174,8 +174,8 @@ sequenceDiagram
 ### Step by step
 
 1. **Upload or select a document.** The content hash is the document ID and version. The UI keeps the active document ID in the current session only.
-2. **Send a question.** The UI posts the question, the active document ID, an optional thread ID and the `X-Demo-User` header to `POST /query`.
-3. **Resolve identity.** FastAPI maps the header to one of three predefined principals. A caller cannot choose an arbitrary role or tenant.
+2. **Send a question.** The UI posts the question, the active document ID and an optional thread ID to `POST /query`. Local demo mode uses `X-Demo-User`; deployed mode sends the authenticated Google email over a server-to-server request protected by a shared secret.
+3. **Resolve identity.** Local mode maps the demo header to one of three predefined principals. Deployed mode accepts only an allowlisted email accompanied by the backend shared secret; deployed allowlisted accounts have the Administrator role.
 4. **Validate the input.** NeMo Guardrails check the question before any retrieval or generation. A rejected input returns a blocked response immediately.
 5. **Retrieve with authorization.** A valid 64-character document ID is mandatory before any Qdrant search. The original query, the HyDE text and each rephrasing use the same tenant, role, classification and document filters.
 6. **Merge and rerank.** Candidates are deduplicated, then FlashRank scores them against the original question and keeps up to 8.
@@ -392,7 +392,8 @@ The API is at `http://localhost:8000` and the interactive docs are at `http://lo
 
 **Terminal 2: start the UI**
 
-```bash
+```powershell
+$env:DEMO_AUTH_ENABLED = "true"
 streamlit run ui/app.py
 ```
 
@@ -470,7 +471,9 @@ Copy `.env.example` to `.env`. The settings model validates every field at start
 | `GEMINI_API_KEY` | yes | Embeddings |
 | `JUDGE_GROQ` | yes | Separate Groq key for RAGAS evaluation |
 | `BACKEND_URL` | no | API URL used by Streamlit (defaults to localhost) |
-| `DEMO_AUTH_ENABLED` | no | Enables the demo identity header |
+| `DEMO_AUTH_ENABLED` | no | Enables simulated identities for local development only; must be false in deployment |
+| `BACKEND_SHARED_SECRET` | production | Shared secret that permits the Streamlit server to call the API |
+| `PORTAL_ALLOWED_EMAILS` | production | Comma-separated Google email allowlist; each allowed account receives the Administrator role |
 | `GUARDRAIL_DEBUG_LOGGING` | no | Verbose guardrail logging. Keep it off in any shared deployment, because it logs generated answers. |
 | `MIN_RERANK_SCORE` | no | Relevance floor, default `0.01` |
 | `LANGSMITH_*`, `LOGFIRE_TOKEN` | no | Declared for future tracing; not active |
@@ -583,21 +586,41 @@ The system is two independent services plus managed Qdrant:
 Streamlit UI  ->  FastAPI backend  ->  Qdrant Cloud  +  Groq / Gemini
 ```
 
-**Backend (any container or web-service host)**
+**Backend (Render)**
 
-- Build: `pip install -r requirements.txt`
-- Start: `uvicorn app.main:app --host 0.0.0.0 --port $PORT`
-- Health check: `GET /health`
-- Set every variable from the [Configuration reference](#configuration-reference) as a platform secret.
+1. In Render, create a **Blueprint** from this GitHub repository and select `render.yaml`.
+2. Enter the requested model, Qdrant, backend secret and allowed-email values as secret environment variables. Do not paste them into repository files.
+3. Wait for the service health check at `GET /health` to pass, then copy its public URL.
+
+The blueprint uses Render's free plan. It may sleep when idle or run out of memory; if startup fails or the service repeatedly restarts, inspect the Render logs. The API uses `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 
 **Frontend (Streamlit Community Cloud or any host)**
 
-- Entry point: `ui/app.py`
-- Set `BACKEND_URL` to the backend's public address.
+1. In Streamlit Community Cloud, deploy this repository's `master` branch with `ui/app.py` as the entry point.
+2. Set `BACKEND_URL` to the Render service's public URL.
+3. Create a Google OAuth client and register the OAuth redirect URI `https://<your-app>.streamlit.app/oauth2callback`.
+4. Configure Streamlit's built-in OIDC authentication and add the same email allowlist and backend shared secret in the app's secrets settings:
+
+  ```toml
+  [auth]
+  redirect_uri = "https://<your-app>.streamlit.app/oauth2callback"
+  cookie_secret = "<long-random-cookie-secret>"
+  client_id = "<google-oauth-client-id>"
+  client_secret = "<google-oauth-client-secret>"
+  server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+
+  [portal]
+  allowed_emails = ["you@example.com"]
+  backend_shared_secret = "<same-value-as-backend-BACKEND_SHARED_SECRET>"
+  ```
+
+5. Open the Streamlit URL, sign in with the allowlisted Google account, and upload the handbook to index it in the configured Qdrant collection.
 
 ### Before exposing it publicly
 
-- The `X-Demo-User` header lets any caller act as any demo user, including the Administrator. A public deployment therefore lets anyone read every section and delete documents. Put an API key or real authentication in front of the backend, or restrict upload and delete, before sharing a link.
+- Never set `DEMO_AUTH_ENABLED=true` on a public backend. That enables the simulated identity header.
+- Every email in `PORTAL_ALLOWED_EMAILS` gets the Administrator role, including permission to upload and delete documents. Keep the allowlist limited to trusted owners.
+- Keep the backend shared secret only in the backend host's secret settings and Streamlit's server-side secrets; never put it in browser code or commit it.
 - Keep `GUARDRAIL_DEBUG_LOGGING` off.
 - Keep `.env` out of the repository and out of container images.
 - The stack is memory-heavy (guardrails, reranker and embedding SDK). Check that the chosen plan has enough RAM.

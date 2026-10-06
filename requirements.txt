@@ -6,7 +6,7 @@ fastapi
 uvicorn[standard]
 python-dotenv
 requests
-streamlit
+streamlit>=1.42
 numpy
 pytz
 nest-asyncio

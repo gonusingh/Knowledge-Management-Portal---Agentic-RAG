@@ -68,9 +68,13 @@ class Settings(BaseSettings):
     # --- Gemini Embeddings ---
     gemini_api_key: str
 
-    # Header-based principals are only for the local authorization demo.
-    # Production deployments must replace this with verified JWT/IAM identity.
+    # Header-based demo identities are only for local authorization tests.
     demo_auth_enabled: bool = False
+    # The API accepts production identity assertions only from the Streamlit
+    # server, authenticated with this server-side shared secret.
+    backend_shared_secret: str | None = None
+    # Comma-separated emails allowed to sign in to the deployed portal.
+    portal_allowed_emails: str = ""
 
     # Raw responder and guardrail outputs can contain document content;
     # keep diagnostics disabled unless explicitly debugging locally.

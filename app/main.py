@@ -10,6 +10,7 @@ import uuid
 import logging
 import time
 import hashlib
+import hmac
 import re
 from typing import Any
 from pathlib import Path
@@ -96,17 +97,49 @@ class QueryResponse(BaseModel):
     trace: list[str] = []
 
 
-def resolve_demo_user(x_demo_user: str = Header(default="alice")) -> UserContext:
-    """Resolve a local demo principal; this header is not production auth."""
-    if not settings.demo_auth_enabled:
+def resolve_demo_user(
+    x_demo_user: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
+    x_authenticated_email: str | None = Header(default=None),
+) -> UserContext:
+    """Resolve local demo identities or an allowlisted portal identity."""
+    if settings.demo_auth_enabled:
+        if x_demo_user is None:
+            raise HTTPException(status_code=401, detail="Demo identity is required.")
+        user = DEMO_USERS.get(x_demo_user.casefold())
+        if user is None:
+            raise HTTPException(status_code=401, detail="Unknown demo user.")
+        return user
+
+    if not settings.backend_shared_secret or not settings.portal_allowed_emails:
         raise HTTPException(
             status_code=503,
-            detail="Demo identity mode is disabled; configure a real authentication provider.",
+            detail="Production authentication is not configured.",
         )
-    user = DEMO_USERS.get(x_demo_user.casefold())
-    if user is None:
-        raise HTTPException(status_code=401, detail="Unknown demo user.")
-    return user
+
+    scheme, _, supplied_secret = (authorization or "").partition(" ")
+    if (
+        scheme.casefold() != "bearer"
+        or not supplied_secret
+        or not hmac.compare_digest(supplied_secret, settings.backend_shared_secret)
+    ):
+        raise HTTPException(status_code=401, detail="Authentication required.")
+
+    email = (x_authenticated_email or "").strip().casefold()
+    allowed_emails = {
+        allowed.strip().casefold()
+        for allowed in settings.portal_allowed_emails.split(",")
+        if allowed.strip()
+    }
+    if not email or email not in allowed_emails:
+        raise HTTPException(status_code=403, detail="This account is not authorized.")
+
+    user_id = hashlib.sha256(email.encode("utf-8")).hexdigest()[:24]
+    return UserContext(
+        user_id=f"google-{user_id}",
+        roles=(Role.ADMINISTRATOR,),
+        tenant="nimbuspay",
+    )
 
 
 @app.post("/query", response_model=QueryResponse)
