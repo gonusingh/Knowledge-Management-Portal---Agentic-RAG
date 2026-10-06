@@ -15,7 +15,9 @@ import streamlit as st
 
 # Same BACKEND_URL pattern as your .env config — defaults to local dev,
 # but can point at a deployed Cloud Run URL in production.
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL") or str(
+    st.secrets.get("BACKEND_URL", "http://localhost:8000")
+)
 DEMO_AUTH_ENABLED = os.getenv("DEMO_AUTH_ENABLED", "false").casefold() == "true"
 
 st.set_page_config(page_title="Knowledge Management Portal", page_icon="🛡️")
