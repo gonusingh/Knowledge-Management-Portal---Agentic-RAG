@@ -70,6 +70,7 @@ class Settings(BaseSettings):
 
     # Header-based demo identities are only for local authorization tests.
     demo_auth_enabled: bool = False
+    public_role_selector: bool = False
     # The API accepts production identity assertions only from the Streamlit
     # server, authenticated with this server-side shared secret.
     backend_shared_secret: str | None = None

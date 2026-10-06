@@ -37,7 +37,10 @@ from app.agents.graph import compiled_graph
 from app.ingestion.chunking import chunk_document
 from app.ingestion.loaders import load_document
 from app.ingestion.policy_reindex import reindex_document_policy
-from app.ingestion.trusted_policy import classification_for_document
+from app.ingestion.trusted_policy import (
+    classification_for_document,
+    trusted_sections_for_document,
+)
 from app.services.retrieval.vector_search import (
     delete_document,
     document_exists,
@@ -60,6 +63,13 @@ from app.security.access_control import (
 
 app = FastAPI(title="Knowledge Management Portal API")
 logger = logging.getLogger(__name__)
+DEFAULT_DEMO_DOCUMENT = "NimbusPay_Enterprise_Policy_Handbook_Demo.docx"
+DEFAULT_DEMO_DOCUMENT_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "DATA"
+    / "true_data"
+    / DEFAULT_DEMO_DOCUMENT
+)
 
 _OUTPUT_GUARDRAIL_TRACE = {
     OutputGuardrailStatus.BLOCK: "Guardrails (output): BLOCKED (safety decision)",
@@ -103,7 +113,7 @@ def resolve_demo_user(
     x_authenticated_email: str | None = Header(default=None),
 ) -> UserContext:
     """Resolve local demo identities or an allowlisted portal identity."""
-    if settings.demo_auth_enabled:
+    if settings.demo_auth_enabled and not settings.public_role_selector:
         if x_demo_user is None:
             raise HTTPException(status_code=401, detail="Demo identity is required.")
         user = DEMO_USERS.get(x_demo_user.casefold())
@@ -111,10 +121,10 @@ def resolve_demo_user(
             raise HTTPException(status_code=401, detail="Unknown demo user.")
         return user
 
-    if not settings.backend_shared_secret or not settings.portal_allowed_emails:
+    if not settings.backend_shared_secret:
         raise HTTPException(
             status_code=503,
-            detail="Production authentication is not configured.",
+            detail="Backend authentication is not configured.",
         )
 
     scheme, _, supplied_secret = (authorization or "").partition(" ")
@@ -124,6 +134,20 @@ def resolve_demo_user(
         or not hmac.compare_digest(supplied_secret, settings.backend_shared_secret)
     ):
         raise HTTPException(status_code=401, detail="Authentication required.")
+
+    if settings.public_role_selector:
+        if x_demo_user is None:
+            raise HTTPException(status_code=401, detail="A demo role is required.")
+        user = DEMO_USERS.get(x_demo_user.casefold())
+        if user is None:
+            raise HTTPException(status_code=401, detail="Unknown demo user.")
+        return user
+
+    if not settings.portal_allowed_emails:
+        raise HTTPException(
+            status_code=503,
+            detail="Production authentication is not configured.",
+        )
 
     email = (x_authenticated_email or "").strip().casefold()
     allowed_emails = {
@@ -140,6 +164,43 @@ def resolve_demo_user(
         roles=(Role.ADMINISTRATOR,),
         tenant="nimbuspay",
     )
+
+
+def ensure_default_demo_document(tenant: str = "nimbuspay") -> bool:
+    """Restore the bundled handbook to Qdrant if an administrator removed it."""
+    if tenant != "nimbuspay":
+        return False
+    if not DEFAULT_DEMO_DOCUMENT_PATH.is_file():
+        raise FileNotFoundError(
+            f"Bundled demo handbook is missing: {DEFAULT_DEMO_DOCUMENT_PATH}"
+        )
+
+    with DEFAULT_DEMO_DOCUMENT_PATH.open("rb") as file_handle:
+        document_id = hashlib.file_digest(file_handle, "sha256").hexdigest()
+    if get_document_metadata(document_id, tenant=tenant) is not None:
+        return False
+
+    access_metadata = build_document_access_metadata(
+        document_id=document_id,
+        classification=classification_for_document(document_id),
+        tenant=tenant,
+        version=document_id,
+    )
+    document = load_document(
+        str(DEFAULT_DEMO_DOCUMENT_PATH),
+        doc_type="true_data",
+        access_metadata=access_metadata,
+    )
+    document["source_file"] = DEFAULT_DEMO_DOCUMENT
+    trusted_sections = trusted_sections_for_document(document_id)
+    if trusted_sections:
+        document["trusted_sections"] = trusted_sections
+    chunks = chunk_document(document)
+    if not chunks:
+        raise ValueError("The bundled demo handbook produced no indexable chunks.")
+    upsert_chunks(chunks)
+    logger.info("Restored default demo handbook to Qdrant (%s chunks).", len(chunks))
+    return True
 
 
 @app.post("/query", response_model=QueryResponse)
@@ -372,9 +433,12 @@ async def upload_document(
 
 @app.get("/documents")
 def list_indexed_documents(
+    restore_default: bool = True,
     user: UserContext = Depends(resolve_demo_user),
 ) -> dict:
     """Return the documents already indexed for this tenant so the UI can select them without re-uploading."""
+    if restore_default:
+        ensure_default_demo_document(user.tenant)
     return {"documents": list_documents(tenant=user.tenant)}
 
 

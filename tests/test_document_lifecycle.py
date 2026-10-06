@@ -1,7 +1,10 @@
 import hashlib
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 import app.main as main_module
@@ -105,6 +108,54 @@ class DocumentLifecycleTests(unittest.TestCase):
 
         check_input.assert_not_called()
         graph.invoke.assert_not_called()
+
+    def test_public_role_selector_keeps_api_behind_shared_secret(self) -> None:
+        with patch.object(main_module.settings, "demo_auth_enabled", False), patch.object(
+            main_module.settings,
+            "public_role_selector",
+            True,
+        ), patch.object(
+            main_module.settings,
+            "backend_shared_secret",
+            "test-backend-secret",
+        ):
+            administrator = main_module.resolve_demo_user(
+                "carol",
+                "Bearer test-backend-secret",
+            )
+            self.assertEqual(administrator, DEMO_USERS["carol"])
+
+            with self.assertRaises(HTTPException) as error:
+                main_module.resolve_demo_user("carol", "Bearer incorrect")
+            self.assertEqual(getattr(error.exception, "status_code", None), 401)
+
+    def test_default_handbook_is_reingested_only_when_missing(self) -> None:
+        content = b"Bundled handbook for lifecycle test."
+        document_id = hashlib.sha256(content).hexdigest()
+        with TemporaryDirectory() as directory:
+            handbook_path = Path(directory) / main_module.DEFAULT_DEMO_DOCUMENT
+            handbook_path.write_bytes(content)
+            with patch.object(
+                main_module,
+                "DEFAULT_DEMO_DOCUMENT_PATH",
+                handbook_path,
+            ), patch(
+                "app.main.get_document_metadata",
+                side_effect=[
+                    None,
+                    {"document_id": document_id},
+                ],
+            ), patch(
+                "app.main.load_document",
+                return_value={"text": "handbook"},
+            ), patch(
+                "app.main.chunk_document",
+                return_value=[{"text": "chunk"}],
+            ), patch("app.main.upsert_chunks") as upsert:
+                self.assertTrue(main_module.ensure_default_demo_document())
+                self.assertFalse(main_module.ensure_default_demo_document())
+
+        upsert.assert_called_once_with([{"text": "chunk"}])
 
 
 if __name__ == "__main__":

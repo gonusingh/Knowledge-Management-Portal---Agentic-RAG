@@ -9,7 +9,7 @@
 
 An enterprise document question-answering portal where **the same question gets a different answer depending on who asks**. Access control is enforced inside the vector database before content reaches the language model, so restricted passages are never included in a user's authorized retrieval context, reranked evidence or LLM prompt.
 
-> **Project status: working prototype and reference implementation.** Local authentication uses three simulated demo users; deployed mode supports Google sign-in with an email allowlist and a private UI-to-API credential. Conversation memory is in-process, and deployment-grade persistence and observability are not wired in. See [Security notes and known limitations](#security-notes-and-known-limitations).
+> **Project status: working prototype and reference implementation.** Authentication uses three simulated demo users. In public demo mode, anyone with the link can choose any role, including Administrator. Conversation memory is in-process, and deployment-grade persistence and observability are not wired in. See [Security notes and known limitations](#security-notes-and-known-limitations).
 
 - **Original v1 project (simple RAG, still live):** https://rag-chatbot-final.streamlit.app
 - **This project's live demo:** link will be added once deployed (see [Deployment](#deployment))
@@ -174,8 +174,8 @@ sequenceDiagram
 ### Step by step
 
 1. **Upload or select a document.** The content hash is the document ID and version. The UI keeps the active document ID in the current session only.
-2. **Send a question.** The UI posts the question, the active document ID and an optional thread ID to `POST /query`. Local demo mode uses `X-Demo-User`; deployed mode sends the authenticated Google email over a server-to-server request protected by a shared secret.
-3. **Resolve identity.** Local mode maps the demo header to one of three predefined principals. Deployed mode accepts only an allowlisted email accompanied by the backend shared secret; deployed allowlisted accounts have the Administrator role.
+2. **Send a question.** The UI posts the question, the active document ID and an optional thread ID to `POST /query`. Local demo mode uses `X-Demo-User`; public demo mode sends the selected role over a server-to-server request protected by a shared secret.
+3. **Resolve identity.** The local selector maps to one of three predefined principals. The public demo selector sends the chosen role through the trusted Streamlit backend connection; anyone with the public link can choose any role.
 4. **Validate the input.** NeMo Guardrails check the question before any retrieval or generation. A rejected input returns a blocked response immediately.
 5. **Retrieve with authorization.** A valid 64-character document ID is mandatory before any Qdrant search. The original query, the HyDE text and each rephrasing use the same tenant, role, classification and document filters.
 6. **Merge and rerank.** Candidates are deduplicated, then FlashRank scores them against the original question and keeps up to 8.
@@ -471,9 +471,10 @@ Copy `.env.example` to `.env`. The settings model validates every field at start
 | `GEMINI_API_KEY` | yes | Embeddings |
 | `JUDGE_GROQ` | no | Separate Groq key for optional RAGAS evaluation |
 | `BACKEND_URL` | no | API URL used by Streamlit (defaults to localhost) |
-| `DEMO_AUTH_ENABLED` | no | Enables simulated identities for local development only; must be false in deployment |
+| `DEMO_AUTH_ENABLED` | no | Enables simulated identities for local development only; keep false in deployment |
+| `PUBLIC_ROLE_SELECTOR` | no | Enables public role choice in the deployed demonstration; anyone may select Administrator |
 | `BACKEND_SHARED_SECRET` | production | Shared secret that permits the Streamlit server to call the API |
-| `PORTAL_ALLOWED_EMAILS` | production | Comma-separated Google email allowlist; each allowed account receives the Administrator role |
+| `PORTAL_ALLOWED_EMAILS` | optional | Comma-separated Google email allowlist when using the private sign-in mode |
 | `GUARDRAIL_DEBUG_LOGGING` | no | Verbose guardrail logging. Keep it off in any shared deployment, because it logs generated answers. |
 | `MIN_RERANK_SCORE` | no | Relevance floor, default `0.01` |
 | `LANGSMITH_*`, `LOGFIRE_TOKEN` | no | Optional observability settings; tracing is disabled by default |
@@ -589,7 +590,7 @@ Streamlit UI  ->  FastAPI backend  ->  Qdrant Cloud  +  Groq / Gemini
 **Backend (Render)**
 
 1. In Render, create a **Blueprint** from this GitHub repository and select `render.yaml`.
-2. Enter the requested model, Qdrant, backend secret and allowed-email values as secret environment variables. Do not paste them into repository files.
+2. Enter the required Groq, Qdrant, Gemini and backend secret values as secret environment variables. Do not paste them into repository files.
 3. Wait for the service health check at `GET /health` to pass, then copy its public URL.
 
 The blueprint uses Render's free plan. It may sleep when idle or run out of memory; if startup fails or the service repeatedly restarts, inspect the Render logs. The API uses `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
@@ -599,27 +600,22 @@ The blueprint uses Render's free plan. It may sleep when idle or run out of memo
 1. In Streamlit Community Cloud, deploy this repository's `master` branch with `ui/app.py` as the entry point.
 2. Set `BACKEND_URL` to the Render service's public URL.
 3. Create a Google OAuth client and register the OAuth redirect URI `https://<your-app>.streamlit.app/oauth2callback`.
-4. Configure Streamlit's built-in OIDC authentication and add the same email allowlist and backend shared secret in the app's secrets settings:
+4. Add the Render URL and the same backend shared secret in Streamlit's app secrets:
 
   ```toml
-  [auth]
-  redirect_uri = "https://<your-app>.streamlit.app/oauth2callback"
-  cookie_secret = "<long-random-cookie-secret>"
-  client_id = "<google-oauth-client-id>"
-  client_secret = "<google-oauth-client-secret>"
-  server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"
+  BACKEND_URL = "https://<your-api>.onrender.com"
 
   [portal]
-  allowed_emails = ["you@example.com"]
+  public_role_selector = true
   backend_shared_secret = "<same-value-as-backend-BACKEND_SHARED_SECRET>"
   ```
 
-5. Open the Streamlit URL, sign in with the allowlisted Google account, and upload the handbook to index it in the configured Qdrant collection.
+5. Open the Streamlit URL. The bundled handbook is restored to Qdrant if missing. Anyone with the link may select Viewer, Operator or Administrator.
 
 ### Before exposing it publicly
 
-- Never set `DEMO_AUTH_ENABLED=true` on a public backend. That enables the simulated identity header.
-- Every email in `PORTAL_ALLOWED_EMAILS` gets the Administrator role, including permission to upload and delete documents. Keep the allowlist limited to trusted owners.
+- `PUBLIC_ROLE_SELECTOR=true` intentionally lets every visitor select Administrator, access confidential handbook sections, upload documents and delete documents. Do not use this mode for private or sensitive data.
+- Keep `DEMO_AUTH_ENABLED=false` on the public backend. Public role selection is separately protected from direct API calls by the shared secret held in Streamlit server-side secrets.
 - Keep the backend shared secret only in the backend host's secret settings and Streamlit's server-side secrets; never put it in browser code or commit it.
 - Keep `GUARDRAIL_DEBUG_LOGGING` off.
 - Keep `.env` out of the repository and out of container images.
@@ -632,7 +628,7 @@ See [Security notes and known limitations](#security-notes-and-known-limitations
 
 | Area | Note |
 |---|---|
-| Authentication | `X-Demo-User` selects one of three hard-coded identities and is trivially forgeable. Replace it with JWT or an identity provider before any real use. |
+| Authentication | In public demo mode, anyone can select any role, including Administrator. The API shared secret prevents callers from bypassing the Streamlit app, but it does not restrict roles within the public app. |
 | Conversation memory | The LangGraph `MemorySaver` is in-process, so history is lost on restart and is not shared across instances. |
 | Provider dependency | Guardrails and generation depend on external model providers. Outages and rate limits fail closed, which keeps data safe but can interrupt the service. |
 | Input-block detection | The input rail's block decision is read from NeMo's refusal wording. A change in that wording would need a matching change in the gate. |

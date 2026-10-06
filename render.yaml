@@ -9,6 +9,8 @@ services:
     envVars:
       - key: DEMO_AUTH_ENABLED
         value: "false"
+      - key: PUBLIC_ROLE_SELECTOR
+        value: "true"
       - key: LANGSMITH_TRACING
         value: "false"
       - key: GUARDRAIL_DEBUG_LOGGING
@@ -22,6 +24,4 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: BACKEND_SHARED_SECRET
-        sync: false
-      - key: PORTAL_ALLOWED_EMAILS
         sync: false

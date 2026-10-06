@@ -19,6 +19,11 @@ BACKEND_URL = os.getenv("BACKEND_URL") or str(
     st.secrets.get("BACKEND_URL", "http://localhost:8000")
 )
 DEMO_AUTH_ENABLED = os.getenv("DEMO_AUTH_ENABLED", "false").casefold() == "true"
+PORTAL_SECRETS = st.secrets.get("portal")
+PUBLIC_ROLE_SELECTOR = (
+    os.getenv("PUBLIC_ROLE_SELECTOR", "false").casefold() == "true"
+    or bool(PORTAL_SECRETS and PORTAL_SECRETS.get("public_role_selector", False))
+)
 
 st.set_page_config(
     page_title="Knowledge Management Portal",
@@ -26,10 +31,22 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-if DEMO_AUTH_ENABLED:
+if DEMO_AUTH_ENABLED and not PUBLIC_ROLE_SELECTOR:
     demo_user = None
     authenticated_email = None
     api_headers: dict[str, str] = {}
+elif PUBLIC_ROLE_SELECTOR:
+    backend_shared_secret = str(
+        PORTAL_SECRETS.get("backend_shared_secret", "")
+        if PORTAL_SECRETS
+        else ""
+    )
+    if not backend_shared_secret:
+        st.error("Public role selection is not configured by the app owner.")
+        st.stop()
+    demo_user = None
+    authenticated_email = None
+    api_headers = {"Authorization": f"Bearer {backend_shared_secret}"}
 else:
     if not st.user.is_logged_in:
         st.title("Knowledge Management Portal")
@@ -38,7 +55,7 @@ else:
         st.stop()
 
     authenticated_email = str(st.user.email).strip().casefold()
-    portal_secrets = st.secrets.get("portal")
+    portal_secrets = PORTAL_SECRETS
     if not portal_secrets:
         st.error("Portal authentication is not configured by the app owner.")
         st.stop()
@@ -206,15 +223,17 @@ if "active_document_filename" not in st.session_state:
     st.session_state.active_document_filename = None
 if "active_document_version" not in st.session_state:
     st.session_state.active_document_version = None
+if "skip_default_restore_once" not in st.session_state:
+    st.session_state.skip_default_restore_once = False
 
 # Sidebar upload control: this keeps the demo usable without leaving the
 # chat interface, while also making it obvious that the knowledge base can
 # be extended by ingesting new source files into the vector store.
 with st.sidebar:
     st.subheader("🛡️ Knowledge workspace")
-    if DEMO_AUTH_ENABLED:
+    if DEMO_AUTH_ENABLED or PUBLIC_ROLE_SELECTOR:
         demo_user = st.selectbox(
-            "Prototype identity (local demo only)",
+            "Choose a role",
             options=["alice", "bob", "carol"],
             format_func=lambda user: {
                 "alice": "Alice · viewer",
@@ -222,8 +241,15 @@ with st.sidebar:
                 "carol": "Carol · administrator",
             }[user],
         )
-        api_headers = {"X-Demo-User": demo_user}
-        st.caption("Demo principal — simulated RBAC identity; local use only.")
+        if DEMO_AUTH_ENABLED and not PUBLIC_ROLE_SELECTOR:
+            api_headers = {"X-Demo-User": demo_user}
+            st.caption("Simulated identity for local development.")
+        else:
+            api_headers["X-Demo-User"] = demo_user
+            st.caption(
+                "Public demo: anyone can choose a role. Choosing Administrator "
+                "grants access to confidential sections and document management."
+            )
         is_administrator = demo_user == "carol"
         active_principal = demo_user
     else:
@@ -237,10 +263,14 @@ with st.sidebar:
             response = requests.get(
                 f"{BACKEND_URL}/documents",
                 headers=api_headers,
+                params={
+                    "restore_default": not st.session_state.skip_default_restore_once
+                },
                 timeout=30,
             )
             response.raise_for_status()
             indexed_documents = response.json().get("documents", [])
+            st.session_state.skip_default_restore_once = False
     except requests.RequestException:
         indexed_documents = []
 
@@ -306,6 +336,11 @@ with st.sidebar:
             except requests.RequestException as exc:
                 st.error(f"Document removal failed: {exc}")
             else:
+                if (
+                    st.session_state.active_document_filename
+                    == DEFAULT_DEMO_DOCUMENT
+                ):
+                    st.session_state.skip_default_restore_once = True
                 st.session_state.active_document_id = None
                 st.session_state.active_document_filename = None
                 st.session_state.active_document_version = None
