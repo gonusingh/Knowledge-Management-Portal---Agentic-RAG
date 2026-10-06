@@ -5,6 +5,8 @@ import sys
 import time
 from urllib.request import urlopen
 
+API_STARTUP_TIMEOUT_SECONDS = 180
+
 
 def stop_process(process: subprocess.Popen[bytes] | None) -> None:
     if process is None or process.poll() is not None:
@@ -18,7 +20,7 @@ def stop_process(process: subprocess.Popen[bytes] | None) -> None:
 
 
 def wait_for_api(process: subprocess.Popen[bytes]) -> None:
-    deadline = time.monotonic() + 30
+    deadline = time.monotonic() + API_STARTUP_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if process.poll() is not None:
             raise RuntimeError("FastAPI exited before becoming healthy.")
@@ -27,7 +29,9 @@ def wait_for_api(process: subprocess.Popen[bytes]) -> None:
                 return
         except OSError:
             time.sleep(1)
-    raise RuntimeError("FastAPI did not become healthy within 30 seconds.")
+    raise RuntimeError(
+        f"FastAPI did not become healthy within {API_STARTUP_TIMEOUT_SECONDS} seconds."
+    )
 
 
 def main() -> int:
