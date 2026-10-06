@@ -193,6 +193,40 @@ st.markdown(
         overflow-wrap: anywhere;
         justify-content: flex-start;
     }
+    div[data-testid="stElementContainer"][class*="st-key-suggested-question-"] button {
+        border: 1px solid #c5d4cb !important;
+        background-color: #ffffff !important;
+        color: #20332b !important;
+    }
+    div[data-testid="stElementContainer"][class*="st-key-suggested-question-"] button p {
+        color: inherit !important;
+    }
+    div[data-testid="stElementContainer"][class*="st-key-suggested-question-"] button:hover {
+        border-color: #789b87 !important;
+        background-color: #edf5f0 !important;
+        color: #20332b !important;
+    }
+    [data-testid="stChatInputSubmitButton"] {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
+        border-radius: 8px !important;
+        background-color: #2f6b4f !important;
+        color: #ffffff !important;
+        opacity: 1 !important;
+        box-shadow: 0 0 0 1px #c5d4cb inset;
+    }
+    [data-testid="stChatInputSubmitButton"]:disabled {
+        background-color: #e1eae5 !important;
+        color: #355843 !important;
+        cursor: not-allowed;
+    }
+    [data-testid="stChatInputSubmitButton"] svg {
+        width: 22px;
+        height: 22px;
+        color: inherit !important;
+        fill: currentColor;
+    }
     [data-testid="stDialog"] {
         border: 1px solid #dce5e0;
         border-radius: 10px;
