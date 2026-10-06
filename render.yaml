@@ -3,7 +3,7 @@ services:
     name: knowledge-management-portal-api
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements-render.txt
     startCommand: python scripts/start_render.py
     healthCheckPath: /
     envVars:
