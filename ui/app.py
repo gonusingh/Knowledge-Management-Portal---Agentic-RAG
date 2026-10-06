@@ -19,11 +19,14 @@ BACKEND_URL = os.getenv("BACKEND_URL") or str(
     st.secrets.get("BACKEND_URL", "http://localhost:8000")
 )
 DEMO_AUTH_ENABLED = os.getenv("DEMO_AUTH_ENABLED", "false").casefold() == "true"
-PORTAL_SECRETS = st.secrets.get("portal")
-PUBLIC_ROLE_SELECTOR = (
-    os.getenv("PUBLIC_ROLE_SELECTOR", "false").casefold() == "true"
-    or bool(PORTAL_SECRETS and PORTAL_SECRETS.get("public_role_selector", False))
-)
+PUBLIC_ROLE_SELECTOR = os.getenv("PUBLIC_ROLE_SELECTOR", "false").casefold() == "true"
+if PUBLIC_ROLE_SELECTOR:
+    PORTAL_SECRETS = None
+else:
+    PORTAL_SECRETS = st.secrets.get("portal")
+    PUBLIC_ROLE_SELECTOR = bool(
+        PORTAL_SECRETS and PORTAL_SECRETS.get("public_role_selector", False)
+    )
 
 st.set_page_config(
     page_title="Knowledge Management Portal",
