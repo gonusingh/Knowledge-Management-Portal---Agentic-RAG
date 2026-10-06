@@ -593,7 +593,7 @@ Streamlit UI  ->  FastAPI backend  ->  Qdrant Cloud  +  Groq / Gemini
 2. Enter the required Groq, Qdrant, Gemini and backend secret values as secret environment variables. Do not paste them into repository files.
 3. Wait for the service to become **Live**, then open its public URL to use the portal. The API listens only on the service's internal loopback address.
 
-The Blueprint uses Render's free plan and installs the app's runtime dependencies from `requirements-render.txt`, leaving evaluation-only packages out of the cloud build. It may sleep when idle or run out of memory; if startup fails or the service repeatedly restarts, inspect the Render logs. The launcher starts FastAPI on `127.0.0.1:8000`, waits for `/health`, and then starts Streamlit on Render's public port. The bundled handbook is restored to Qdrant if missing. Anyone with the link may select Viewer, Operator or Administrator.
+The Blueprint uses Render's free plan and Python 3.13.7 from `.python-version`. It installs app runtime dependencies from `requirements-render.txt`, leaving evaluation-only packages out of the cloud build. It may sleep when idle or run out of memory; if startup fails or the service repeatedly restarts, inspect the Render logs. The launcher starts FastAPI on `127.0.0.1:8000`, waits for `/health`, and then starts Streamlit on Render's public port. The bundled handbook is restored to Qdrant if missing. Anyone with the link may select Viewer, Operator or Administrator.
 
 ### Before exposing it publicly
 

@@ -15,5 +15,6 @@ pypdf
 pdfplumber
 beautifulsoup4
 nemoguardrails
+PyYAML>=6.0.2
 openai
 portkey-ai
