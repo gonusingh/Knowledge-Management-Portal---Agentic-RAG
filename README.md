@@ -579,7 +579,7 @@ These results use a small curated evaluation set and should be treated as protot
 
 ## Deployment
 
-The repository has been validated locally. A public production deployment is not part of the current validation evidence; the following describes the intended deployment shape.
+The portal is deployed publicly as a demonstration. It is not hardened for production; the following describes the deployment setup.
 
 The Render service runs the Streamlit UI and FastAPI backend together, plus managed Qdrant:
 
