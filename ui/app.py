@@ -232,6 +232,22 @@ st.markdown(
         border-radius: 10px;
     }
     @media (max-width: 640px) {
+        [data-testid="stHeader"] {
+            display: flex !important;
+            background: #f6f8f7;
+            border-bottom: 1px solid #dce5e0;
+        }
+        [data-testid="stExpandSidebarButton"] {
+            display: flex !important;
+            width: 44px;
+            height: 44px;
+            align-items: center;
+            justify-content: center;
+            color: #20332b !important;
+        }
+        [data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
+            color: #20332b !important;
+        }
         .block-container {
             padding: 1.2rem 1rem 1.5rem;
         }
