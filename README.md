@@ -12,7 +12,7 @@ An enterprise document question-answering portal where **the same question gets 
 > **Project status: working prototype and reference implementation.** Authentication uses three simulated demo users. In public demo mode, anyone with the link can choose any role, including Administrator. Conversation memory is in-process, and deployment-grade persistence and observability are not wired in. See [Security notes and known limitations](#security-notes-and-known-limitations).
 
 - **Original v1 project (simple RAG, still live):** https://rag-chatbot-final.streamlit.app
-- **This project's live demo:** link will be added once deployed (see [Deployment](#deployment))
+- **This project's live demo:** [Open the portal](https://knowledge-management-portal-api.onrender.com) (see [Deployment](#deployment))
 
 ## Highlights
 
