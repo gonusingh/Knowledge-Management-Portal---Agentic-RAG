@@ -554,16 +554,10 @@ st.markdown(
         overflow-wrap: anywhere;
         background: var(--portal-panel);
     }
-    body:has([data-testid="stChatInput"]:focus-within)
-    [data-testid="stVerticalBlock"][class*="st-key-suggested-prompts"] {
-        display: none;
-    }
     body:has([data-testid="stForm"] [data-testid="stTextInput"] input:focus)
-    [data-testid="stVerticalBlock"][class*="st-key-suggested-prompts"] {
-        display: none;
-    }
+    [data-testid="stVerticalBlock"][class~="st-key-suggested-prompts"],
     body:has([data-testid="stForm"] [data-testid="stTextInput"] input:not(:placeholder-shown))
-    [data-testid="stVerticalBlock"][class*="st-key-suggested-prompts"] {
+    [data-testid="stVerticalBlock"][class~="st-key-suggested-prompts"] {
         display: none;
     }
     [data-testid="stChatInputSubmitButton"] {
@@ -1215,6 +1209,7 @@ else:
             initial_prompt = st.text_input(
                 "Ask a question about the selected document...",
                 label_visibility="collapsed",
+                placeholder="Ask a question about the selected document...",
                 disabled=not st.session_state.active_document_id,
             )
         with submit_column:
