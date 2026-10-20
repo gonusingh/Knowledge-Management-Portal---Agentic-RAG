@@ -545,21 +545,6 @@ st.markdown(
         outline: 2px solid #79b5ff;
         outline-offset: 2px;
     }
-    [data-testid="stElementContainer"][class*="st-key-suggested-question-"] button {
-        height: 100%;
-        min-height: 3.1rem;
-        justify-content: flex-start;
-        text-align: left;
-        white-space: normal;
-        overflow-wrap: anywhere;
-        background: var(--portal-panel);
-    }
-    body:has([data-testid="stForm"] [data-testid="stTextInput"] input:focus)
-    [data-testid="stVerticalBlock"][class~="st-key-suggested-prompts"],
-    body:has([data-testid="stForm"] [data-testid="stTextInput"] input:not(:placeholder-shown))
-    [data-testid="stVerticalBlock"][class~="st-key-suggested-prompts"] {
-        display: none;
-    }
     [data-testid="stChatInputSubmitButton"] {
         width: 38px;
         height: 38px;
@@ -1120,35 +1105,10 @@ if not st.session_state.messages:
             """,
             unsafe_allow_html=True,
         )
-        if st.session_state.active_document_id:
-            suggested_question = None
-            suggested_questions = (
-                "Summarize the selected document.",
-                "What skills, topics, or key terms are mentioned?",
-                "Find information about a person or project.",
-                "Compare two topics if both are covered.",
-            )
-            with st.container(key="suggested-prompts"):
-                st.markdown(
-                    "<p class='portal-kicker'>SUGGESTED PROMPTS</p>",
-                    unsafe_allow_html=True,
-                )
-                prompt_columns = st.columns(2)
-                for index, question in enumerate(suggested_questions):
-                    if prompt_columns[index % 2].button(
-                        question,
-                        key=f"suggested-question-{index}",
-                        use_container_width=True,
-                        type="secondary",
-                    ):
-                        suggested_question = question
-        else:
-            suggested_question = None
+        if not st.session_state.active_document_id:
             st.info(
                 "Select an indexed document from the workspace sidebar to start a conversation."
             )
-else:
-    suggested_question = None
 
 
 # --- Render existing chat history -------------------------------------
@@ -1223,9 +1183,6 @@ else:
                 disabled=not st.session_state.active_document_id,
             )
     user_input = initial_prompt if submitted else None
-
-if suggested_question is not None:
-    user_input = suggested_question
 
 if user_input:
     with st.chat_message("user", avatar=":material/person:"):
