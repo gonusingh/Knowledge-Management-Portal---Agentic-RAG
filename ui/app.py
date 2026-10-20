@@ -1076,7 +1076,7 @@ else:
 # window instead of losing history after each message.
 for message_index, message in enumerate(st.session_state.messages):
     is_assistant = message["role"] == "assistant"
-    avatar = "K" if is_assistant else "U"
+    avatar = ":material/auto_awesome:" if is_assistant else ":material/person:"
     with st.chat_message(message["role"], avatar=avatar):
         st.caption("Knowledge Assistant" if is_assistant else "You")
         if message.get("blocked"):
@@ -1123,10 +1123,10 @@ if suggested_question is not None:
     user_input = suggested_question
 
 if user_input:
-    with st.chat_message("user", avatar="U"):
+    with st.chat_message("user", avatar=":material/person:"):
         st.caption("You")
         st.markdown(user_input)
-    with st.chat_message("assistant", avatar="K"):
+    with st.chat_message("assistant", avatar=":material/auto_awesome:"):
         st.caption("Knowledge Assistant")
         with st.spinner("Searching your knowledge base..."):
             try:
