@@ -22,7 +22,7 @@ class DocumentLifecycleTests(unittest.TestCase):
     def tearDown(self) -> None:
         main_module.app.dependency_overrides = self.original_overrides
 
-    def test_unchanged_upload_reindexes_existing_content_hash(self) -> None:
+    def test_admin_classification_is_explicit_and_preserved_on_reupload(self) -> None:
         content = b"Active document lifecycle test."
         with patch(
             "app.main.get_document_metadata",
@@ -31,7 +31,7 @@ class DocumentLifecycleTests(unittest.TestCase):
                 {
                     "source_file": "notes.txt",
                     "version": hashlib.sha256(content).hexdigest(),
-                    "classification": "RESTRICTED",
+                    "classification": "PUBLIC",
                 },
             ],
         ), patch("app.main.upsert_chunks") as upsert, patch(
@@ -62,8 +62,11 @@ class DocumentLifecycleTests(unittest.TestCase):
         expected_hash = hashlib.sha256(content).hexdigest()
         self.assertEqual(first.json()["document_id"], expected_hash)
         self.assertEqual(indexed_chunk["version"], expected_hash)
-        self.assertEqual(indexed_chunk["classification"], "RESTRICTED")
-        self.assertEqual(indexed_chunk["allowed_roles"], ["administrator"])
+        self.assertEqual(indexed_chunk["classification"], "PUBLIC")
+        self.assertEqual(
+            set(indexed_chunk["allowed_roles"]),
+            {"administrator", "operator", "viewer"},
+        )
         self.assertEqual(indexed_chunk["source_file"], "notes.txt")
         refreshed_chunk = upsert.call_args_list[1].args[0][0]
         self.assertEqual(refreshed_chunk["text"], content.decode())
@@ -76,6 +79,36 @@ class DocumentLifecycleTests(unittest.TestCase):
             delete_stale.call_args_list[-1].kwargs,
             {"tenant": "nimbuspay", "chunk_count": 1},
         )
+
+    def test_non_admin_cannot_upload_or_assign_document_access(self) -> None:
+        main_module.app.dependency_overrides[main_module.resolve_demo_user] = (
+            lambda: DEMO_USERS["alice"]
+        )
+        with patch("app.main.upsert_chunks") as upsert:
+            response = self.client.post(
+                "/upload",
+                files={"file": ("notes.txt", b"Internal notes.", "text/plain")},
+                data={"classification": "PUBLIC"},
+                headers={"X-Demo-User": "alice"},
+            )
+
+        self.assertEqual(response.status_code, 403)
+        upsert.assert_not_called()
+
+    def test_unclassified_ordinary_upload_defaults_to_restricted(self) -> None:
+        with patch("app.main.get_document_metadata", return_value=None), patch(
+            "app.main.upsert_chunks"
+        ) as upsert, patch("app.main.delete_stale_document_chunks"):
+            response = self.client.post(
+                "/upload",
+                files={"file": ("ordinary.txt", b"Ordinary document text.", "text/plain")},
+                headers={"X-Demo-User": "carol"},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        indexed_chunk = upsert.call_args.args[0][0]
+        self.assertEqual(indexed_chunk["classification"], "RESTRICTED")
+        self.assertEqual(indexed_chunk["allowed_roles"], ["administrator"])
 
     def test_invalid_docx_upload_returns_a_parsing_error(self) -> None:
         with patch("app.main.get_document_metadata", return_value=None):

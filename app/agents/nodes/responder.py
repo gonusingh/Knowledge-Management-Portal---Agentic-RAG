@@ -8,6 +8,7 @@ populated or empty by the time this node runs.
 
 from app.agents.relevance import (
     MIN_RERANK_SCORE,
+    has_lexical_evidence,
     is_relevant_rerank_score,
 )
 from app.gateway.portkey_client import (
@@ -53,13 +54,18 @@ def responder_node(state: dict) -> dict:
     # scored as essentially unrelated to the question, abstain without an LLM
     # call. Chunks without a score are not judged here (behaviour unchanged).
     best_score = _best_rerank_score(context_chunks) if context_chunks else None
-    relevance_is_weak = (
+    rerank_is_weak = (
         not context_chunks
         or (
             best_score is not None
             and not is_relevant_rerank_score(best_score, MIN_RERANK_SCORE)
         )
     )
+    lexical_evidence, matching_terms, query_terms = has_lexical_evidence(
+        user_query,
+        context_chunks,
+    )
+    relevance_is_weak = rerank_is_weak and not lexical_evidence
     if state.get("intent") == "technical" and relevance_is_weak:
         answer = (
             ACCESS_DENIED_MESSAGE
@@ -82,6 +88,17 @@ def responder_node(state: dict) -> dict:
         }
 
     conversation_history = state.get("conversation_history", [])
+    evidence_trace = []
+    if (
+        state.get("intent") == "technical"
+        and rerank_is_weak
+        and lexical_evidence
+    ):
+        evidence_trace.append(
+            "Evidence check: rerank score was below the configured floor; "
+            f"explicit term overlap found ({matching_terms}/{query_terms}), "
+            "so the responder will verify support against authorized context"
+        )
 
     answer = call_llm(
         user_query=user_query,
@@ -103,5 +120,10 @@ def responder_node(state: dict) -> dict:
 
     return {
         "final_answer": answer,
-        "trace": [*state.get("trace", []), *extra_trace, trace_line],
+        "trace": [
+            *state.get("trace", []),
+            *evidence_trace,
+            *extra_trace,
+            trace_line,
+        ],
     }

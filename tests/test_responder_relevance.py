@@ -45,6 +45,51 @@ class ResponderRelevanceFloorTests(unittest.TestCase):
         self.assertEqual(result["final_answer"], NO_EVIDENCE_MESSAGE)
         self.assertIn("relevance floor", result["trace"][-1])
 
+    def test_low_score_resume_match_reaches_grounded_responder(self):
+        resume_chunk = {
+            "text": (
+                "Aarush Sharma is an engineer with experience building "
+                "enterprise GenAI systems."
+            ),
+            "source_file": "resume.pdf",
+            "rerank_score": 0.007372,
+        }
+        state = {
+            "user_query": "Could you give me a 100-word description of Aarush?",
+            "intent": "technical",
+            "reranked_chunks": [resume_chunk],
+            "trace": [],
+        }
+        with patch.object(
+            responder,
+            "call_llm",
+            return_value="Aarush Sharma is an engineer.",
+        ) as call_llm:
+            result = responder.responder_node(state)
+
+        call_llm.assert_called_once()
+        self.assertEqual(result["final_answer"], "Aarush Sharma is an engineer.")
+        self.assertIn("explicit term overlap found (1/2)", result["trace"][0])
+
+    def test_low_score_without_query_evidence_still_abstains(self):
+        state = {
+            "user_query": "Describe the solar reactor maintenance schedule.",
+            "intent": "technical",
+            "reranked_chunks": [
+                {
+                    "text": "Aarush Sharma is an engineer with experience in GenAI.",
+                    "source_file": "resume.pdf",
+                    "rerank_score": 0.007372,
+                }
+            ],
+            "trace": [],
+        }
+        with patch.object(responder, "call_llm") as call_llm:
+            result = responder.responder_node(state)
+
+        call_llm.assert_not_called()
+        self.assertEqual(result["final_answer"], NO_EVIDENCE_MESSAGE)
+
     def test_relevant_chunk_reaches_the_llm_and_score_is_traced(self):
         result, call_llm = self.run_node([chunk(0.9909), chunk(0.0033)])
 

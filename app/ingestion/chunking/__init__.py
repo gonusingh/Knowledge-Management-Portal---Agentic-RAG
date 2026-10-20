@@ -24,7 +24,10 @@ IMPORTANT:
 - A chunk never crosses a trusted section boundary.
 """
 
-MAX_CHUNK_CHARS = 1500
+from app.config import settings
+
+MAX_CHUNK_CHARS = settings.rag_chunk_size_chars
+CHUNK_OVERLAP_CHARS = settings.rag_chunk_overlap_chars
 
 
 def _split_into_paragraphs(text: str) -> list[str]:
@@ -44,7 +47,7 @@ def _split_into_paragraphs(text: str) -> list[str]:
 
 
 def _split_oversized_paragraph(paragraph: str) -> list[str]:
-    """Split long extracted lines at whitespace so no retrieval chunk is unbounded."""
+    """Split long extracted paragraphs with bounded, configurable overlap."""
     pieces = []
     remaining = paragraph.strip()
 
@@ -53,7 +56,12 @@ def _split_oversized_paragraph(paragraph: str) -> list[str]:
         if split_at <= 0:
             split_at = MAX_CHUNK_CHARS
         pieces.append(remaining[:split_at].strip())
-        remaining = remaining[split_at:].strip()
+        next_start = (
+            split_at
+            if split_at <= CHUNK_OVERLAP_CHARS
+            else split_at - CHUNK_OVERLAP_CHARS
+        )
+        remaining = remaining[next_start:].strip()
 
     if remaining:
         pieces.append(remaining)

@@ -8,24 +8,21 @@ Talks to the FastAPI backend's /query endpoint. Run with:
 """
 
 import os
-import re
 from html import escape
 from textwrap import dedent
 
 import requests
 import streamlit as st
+from app.services.source_evidence import (
+    distinct_source_count,
+    extract_selected_sources,
+)
 
 # Same BACKEND_URL pattern as your .env config — defaults to local dev,
 # but can point at a deployed Cloud Run URL in production.
 BACKEND_URL = os.getenv("BACKEND_URL") or str(
     st.secrets.get("BACKEND_URL", "http://localhost:8000")
 )
-
-_SELECTED_SOURCE_PATTERN = re.compile(
-    r"^Selected chunk: source=(?P<source>.*?), document_id=.*?, "
-    r"chunk_index=(?P<chunk_index>[^,]+), rerank_score=(?P<score>-?\d+(?:\.\d+)?)$"
-)
-
 
 def backend_request_error(exc: requests.RequestException) -> str:
     """Show a safe API error detail when the backend provides one."""
@@ -45,30 +42,6 @@ def backend_request_error(exc: requests.RequestException) -> str:
         f"The backend request failed ({status}). "
         "Check the FastAPI logs for the underlying error."
     )
-
-
-def extract_selected_sources(trace: list[str]) -> list[dict[str, str]]:
-    """Read only source metadata already emitted in the authorized retrieval trace."""
-    sources = []
-    seen = set()
-    for item in trace:
-        match = _SELECTED_SOURCE_PATTERN.match(item)
-        if not match:
-            continue
-        source = match.group("source")
-        chunk_index = match.group("chunk_index")
-        key = (source, chunk_index)
-        if key in seen:
-            continue
-        seen.add(key)
-        sources.append(
-            {
-                "source": source,
-                "chunk_index": chunk_index,
-                "score": match.group("score"),
-            }
-        )
-    return sources
 
 
 def render_answer_evidence(trace: list[str], *, blocked: bool = False) -> None:
@@ -739,6 +712,8 @@ if "skip_default_restore_once" not in st.session_state:
     st.session_state.skip_default_restore_once = False
 if "confirm_remove_active_document" not in st.session_state:
     st.session_state.confirm_remove_active_document = False
+if "latest_query_failed" not in st.session_state:
+    st.session_state.latest_query_failed = False
 
 # Sidebar upload control: this keeps the demo usable without leaving the
 # chat interface, while also making it obvious that the knowledge base can
@@ -862,6 +837,7 @@ with st.sidebar:
             st.session_state.messages = []
             st.session_state.thread_id = None
             st.session_state.pending_refinement = None
+            st.session_state.latest_query_failed = False
             st.rerun()
     else:
         st.caption("No documents are available to your role.")
@@ -919,17 +895,34 @@ with st.sidebar:
                     st.session_state.messages = []
                     st.session_state.thread_id = None
                     st.session_state.pending_refinement = None
+                    st.session_state.latest_query_failed = False
                     st.session_state.confirm_remove_active_document = False
                     st.rerun()
         if not is_administrator:
             st.caption("Document removal requires the Administrator role.")
 
     st.markdown("#### Add knowledge")
-    st.caption("Upload a source document to index it for authorized questions.")
-    uploaded_file = st.file_uploader(
-        "Add to the knowledge base",
-        type=["pdf", "docx", "pptx", "html", "txt"],
-    )
+    if is_administrator:
+        st.caption(
+            "Upload a source document and assign its access classification."
+        )
+        upload_classification = st.selectbox(
+            "Document access classification",
+            options=["RESTRICTED", "CONFIDENTIAL", "INTERNAL", "PUBLIC"],
+            index=0,
+            help=(
+                "New ordinary documents default to restricted access. "
+                "The backend enforces this classification on every retrieval."
+            ),
+        )
+        uploaded_file = st.file_uploader(
+            "Add to the knowledge base",
+            type=["pdf", "docx", "pptx", "html", "txt"],
+        )
+    else:
+        st.caption("Document uploads and access classification require Administrator access.")
+        uploaded_file = None
+        upload_classification = None
     if uploaded_file is not None:
         if st.button("Ingest this file"):
             try:
@@ -938,6 +931,7 @@ with st.sidebar:
                     response = requests.post(
                         f"{BACKEND_URL}/upload",
                         files=files,
+                        data={"classification": upload_classification},
                         headers=api_headers,
                         timeout=60,
                     )
@@ -947,6 +941,7 @@ with st.sidebar:
                     st.session_state.messages = []
                     st.session_state.thread_id = None
                     st.session_state.pending_refinement = None
+                    st.session_state.latest_query_failed = False
                 st.session_state.active_document_id = data["document_id"]
                 st.session_state.active_document_filename = data["filename"]
                 st.session_state.active_document_version = data["version"]
@@ -991,6 +986,7 @@ if identity_changed:
     st.session_state.messages = []
     st.session_state.thread_id = None
     st.session_state.pending_refinement = None
+    st.session_state.latest_query_failed = False
 st.session_state.active_principal = active_principal
 
 if identity_changed:
@@ -998,7 +994,9 @@ if identity_changed:
 
 
 available_document_ids = {
-    document.get("document_id") for document in indexed_documents
+    document.get("document_id")
+    for document in indexed_documents
+    if document.get("document_id")
 }
 active_document_count = int(
     bool(st.session_state.active_document_id)
@@ -1018,11 +1016,25 @@ latest_sources = (
     else []
 )
 if document_library_error:
+    source_metric_label = "AVAILABLE DOCUMENTS"
     trusted_sources_value = "Unavailable"
     trusted_sources_detail = "Document library could not be reached."
+elif st.session_state.latest_query_failed:
+    source_metric_label = "RETRIEVED SOURCES"
+    trusted_sources_value = "Unavailable"
+    trusted_sources_detail = "The latest query did not complete successfully."
+elif latest_assistant_message is not None and not latest_assistant_message.get("blocked"):
+    source_metric_label = "RETRIEVED SOURCES"
+    trusted_sources_value = str(distinct_source_count(latest_sources))
+    trusted_sources_detail = (
+        "Distinct source documents in the latest authorized retrieval trace."
+    )
 else:
-    trusted_sources_value = f"{len(indexed_documents)} indexed"
-    trusted_sources_detail = f"{active_document_count} active in this conversation"
+    source_metric_label = "AVAILABLE DOCUMENTS"
+    trusted_sources_value = str(len(available_document_ids))
+    trusted_sources_detail = (
+        f"{active_document_count} active in this conversation."
+    )
 
 if DEMO_AUTH_ENABLED or PUBLIC_ROLE_SELECTOR:
     current_access = {
@@ -1050,7 +1062,7 @@ else:
 
 trust_items = (
     (
-        "TRUSTED SOURCES",
+        source_metric_label,
         trusted_sources_value,
         trusted_sources_detail,
     ),
@@ -1114,9 +1126,9 @@ if not st.session_state.messages:
             suggested_question = None
             suggested_questions = (
                 "Summarize the selected document.",
-                "Find a specific policy or procedure.",
-                "Explain a documented technical issue.",
-                "Compare two topics covered by the available sources.",
+                "What skills, topics, or key terms are mentioned?",
+                "Find information about a person or project.",
+                "Compare two topics if both are covered.",
             )
             with st.container(key="suggested-prompts"):
                 st.markdown(
@@ -1221,6 +1233,7 @@ if user_input:
     with st.chat_message("assistant", avatar=":material/auto_awesome:"):
         st.caption("Knowledge Assistant")
         with st.spinner("Searching your knowledge base..."):
+            st.session_state.latest_query_failed = True
             try:
                 response = requests.post(
                     f"{BACKEND_URL}/query",
@@ -1237,6 +1250,7 @@ if user_input:
             except requests.RequestException as exc:
                 st.error(backend_request_error(exc))
                 st.stop()
+            st.session_state.latest_query_failed = False
 
         if data.get("blocked"):
             st.warning(data["answer"])

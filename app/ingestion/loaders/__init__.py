@@ -47,7 +47,9 @@ def _load_pdf(file_path: str) -> str:
         with open(file_path, "rb") as file_handle:
             reader = pypdf.PdfReader(file_handle)
             extracted_texts.append(
-                "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+                "\n\n".join(
+                    page.extract_text() or "" for page in reader.pages
+                ).strip()
             )
     except (OSError, ValueError, pypdf.errors.PdfReadError) as exc:
         parser_errors.append(exc)
@@ -55,7 +57,9 @@ def _load_pdf(file_path: str) -> str:
     try:
         with pdfplumber.open(file_path) as pdf:
             extracted_texts.append(
-                "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
+                "\n\n".join(
+                    page.extract_text() or "" for page in pdf.pages
+                ).strip()
             )
     except (
         OSError,
@@ -105,13 +109,21 @@ def _load_docx(file_path: str) -> str:
         if child.tag.endswith("}p"):
             paragraph = Paragraph(child, doc)
             if paragraph.text.strip():
+                style_name = paragraph.style.name if paragraph.style else ""
+                paragraph_text = paragraph.text.strip()
+                if style_name.startswith("Heading"):
+                    try:
+                        heading_level = int(style_name.rsplit(" ", 1)[-1])
+                    except ValueError:
+                        heading_level = 2
+                    paragraph_text = f"{'#' * max(1, min(heading_level, 6))} {paragraph_text}"
+                elif style_name.startswith("List"):
+                    paragraph_text = f"- {paragraph_text}"
                 if pending_table_rows:
                     paragraph_text = "\n".join(
-                        [*pending_table_rows, paragraph.text]
+                        [*pending_table_rows, paragraph_text]
                     )
                     pending_table_rows.clear()
-                else:
-                    paragraph_text = paragraph.text
                 body_parts.append(paragraph_text)
         elif child.tag.endswith("}tbl"):
             table = Table(child, doc)
@@ -215,6 +227,13 @@ def load_document(
 
     loader_function = _LOADERS[extension]
     extracted_text = loader_function(file_path)
+    if not extracted_text.strip():
+        if extension == ".pdf":
+            raise ValueError(
+                "No selectable text could be extracted from this PDF. "
+                "It may be scanned or image-only; OCR is not supported."
+            )
+        raise ValueError("No extractable text was found in the document.")
 
     source_file = os.path.basename(file_path)
 

@@ -116,7 +116,7 @@ class DocumentIngestionTests(unittest.TestCase):
                     )
 
             self.assertEqual(response.status_code, 400)
-            self.assertIn("No text could be extracted", response.json()["detail"])
+            self.assertIn("OCR is not supported", response.json()["detail"])
             upsert.assert_not_called()
         finally:
             main_module.app.dependency_overrides = original_overrides
@@ -125,7 +125,7 @@ class DocumentIngestionTests(unittest.TestCase):
         with TemporaryDirectory() as directory:
             docx_path = Path(directory) / "aarush_resume.docx"
             document_file = Document()
-            document_file.add_paragraph("Professional experience")
+            document_file.add_heading("Professional experience", level=1)
             table = document_file.add_table(rows=1, cols=2)
             table.cell(0, 0).text = "Candidate"
             table.cell(0, 1).text = "Aarush Sharma"
@@ -134,9 +134,65 @@ class DocumentIngestionTests(unittest.TestCase):
             document = load_document(str(docx_path))
             chunks = chunk_document(document)
 
+        self.assertIn("# Professional experience", document["text"])
         self.assertIn("Candidate | Aarush Sharma", document["text"])
         self.assertTrue(
             any("Aarush Sharma" in chunk["text"] for chunk in chunks)
+        )
+
+    def test_configured_chunk_overlap_does_not_cross_acl_boundary(self) -> None:
+        from app.ingestion import chunking
+
+        document = {
+            "text": (
+                "Public guidance " * 24
+                + "\n\n"
+                + "Restricted security procedure " * 24
+            ),
+            "source_file": "policy.txt",
+            "type": "true_data",
+            "document_id": "d" * 64,
+            "classification": "RESTRICTED",
+            "allowed_roles": ["administrator"],
+            "tenant": "nimbuspay",
+            "service": None,
+            "effective_date": None,
+            "version": "v1",
+            "trusted_sections": [
+                {
+                    "start_paragraph": 0,
+                    "end_paragraph": 1,
+                    "classification": "PUBLIC",
+                    "allowed_roles": ["viewer", "operator", "administrator"],
+                },
+                {
+                    "start_paragraph": 1,
+                    "end_paragraph": 2,
+                    "classification": "RESTRICTED",
+                    "allowed_roles": ["administrator"],
+                },
+            ],
+        }
+        with patch.object(chunking, "MAX_CHUNK_CHARS", 256), patch.object(
+            chunking, "CHUNK_OVERLAP_CHARS", 32
+        ):
+            chunks = chunking.chunk_document(document)
+
+        self.assertGreater(len(chunks), 2)
+        self.assertTrue(
+            all(
+                chunk["classification"] == "PUBLIC"
+                for chunk in chunks
+                if "Public guidance" in chunk["text"]
+                and "Restricted security procedure" not in chunk["text"]
+            )
+        )
+        self.assertTrue(
+            all(
+                chunk["classification"] == "RESTRICTED"
+                for chunk in chunks
+                if "Restricted security procedure" in chunk["text"]
+            )
         )
 
     def test_docx_tables_do_not_shift_trusted_section_paragraph_ranges(self) -> None:

@@ -12,6 +12,7 @@ of silently crashing later mid-request (a much worse debugging experience).
 # your stack) specifically for loading and validating environment variables.
 # We use it instead of plain os.getenv() because it gives us automatic
 # type validation and startup-time errors for free.
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # IMPORTANT: pydantic-settings loads .env into OUR Settings object below,
@@ -60,6 +61,11 @@ class Settings(BaseSettings):
     # --- Streamlit UI -> FastAPI backend URL ---
     backend_url: str = "http://localhost:8000"
 
+    # Paragraph-aware chunk bounds. Overlap is disabled by default to avoid
+    # duplicated evidence; a small overlap may be configured for long lines.
+    rag_chunk_size_chars: int = Field(default=1500, ge=256, le=8000)
+    rag_chunk_overlap_chars: int = Field(default=0, ge=0, le=2000)
+
     # --- Eval judge LLM (kept separate from groq_api_key on purpose —
     #     see our RAGAS notes: this prevents a big eval run from
     #     rate-limiting real production users) ---
@@ -85,6 +91,14 @@ class Settings(BaseSettings):
     # and to ignore any extra keys in .env we haven't declared above
     # (rather than crashing on them).
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    @model_validator(mode="after")
+    def validate_chunk_overlap(self) -> "Settings":
+        if self.rag_chunk_overlap_chars >= self.rag_chunk_size_chars:
+            raise ValueError(
+                "RAG_CHUNK_OVERLAP_CHARS must be smaller than RAG_CHUNK_SIZE_CHARS."
+            )
+        return self
 
 
 # This line runs ONCE, the moment this module is first imported anywhere

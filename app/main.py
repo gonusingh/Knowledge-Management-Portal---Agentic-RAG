@@ -15,7 +15,7 @@ import re
 from typing import Any
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Header, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from pydantic import BaseModel
 from typing import Literal
 
@@ -39,6 +39,7 @@ from app.ingestion.chunking import chunk_document
 from app.ingestion.loaders import load_document
 from app.ingestion.policy_reindex import reindex_document_policy
 from app.ingestion.trusted_policy import (
+    TRUSTED_DOCUMENT_CLASSIFICATIONS,
     classification_for_document,
     trusted_sections_for_document,
 )
@@ -56,6 +57,7 @@ from app.services.token_usage import (
     stop_token_tracking,
 )
 from app.security.access_control import (
+    Classification,
     DEMO_USERS,
     Role,
     UserContext,
@@ -341,6 +343,7 @@ def query(
 @app.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
+    classification: Classification | None = Form(default=None),
     user: UserContext = Depends(resolve_demo_user),
 ) -> dict:
     """
@@ -351,19 +354,29 @@ async def upload_document(
     """
     temp_path = None
     try:
+        if Role.ADMINISTRATOR not in user.roles:
+            raise HTTPException(
+                status_code=403,
+                detail="Uploading and classifying documents requires the administrator role.",
+            )
+
         file_bytes = await file.read()
         if not file_bytes:
             raise HTTPException(status_code=400, detail="The uploaded document is empty.")
 
         document_digest = hashlib.sha256(file_bytes).hexdigest()
-        classification = classification_for_document(document_digest)
         existing_metadata = get_document_metadata(
             document_digest,
             tenant=user.tenant,
         )
+        trusted_classification = TRUSTED_DOCUMENT_CLASSIFICATIONS.get(document_digest)
 
         if existing_metadata is not None:
-            if existing_metadata.get("classification") != classification.value:
+            if (
+                trusted_classification is not None
+                and existing_metadata.get("classification")
+                != trusted_classification.value
+            ):
                 reindex_document_policy(
                     document_digest,
                     tenant=user.tenant,
@@ -379,9 +392,22 @@ async def upload_document(
         else:
             filename = Path(file.filename or "uploaded_document").name
 
+        effective_classification = trusted_classification
+        if effective_classification is None and classification is not None:
+            effective_classification = classification
+        if effective_classification is None and existing_metadata is not None:
+            try:
+                effective_classification = Classification(
+                    existing_metadata.get("classification", "RESTRICTED")
+                )
+            except ValueError:
+                effective_classification = Classification.RESTRICTED
+        if effective_classification is None:
+            effective_classification = classification_for_document(document_digest)
+
         access_metadata = build_document_access_metadata(
             document_id=document_digest,
-            classification=classification,
+            classification=effective_classification,
             tenant=user.tenant,
             version=document_digest,
         )
