@@ -9,7 +9,47 @@ import app.main as main_module
 
 
 class EmptyModelAnswerTests(unittest.TestCase):
-    def test_empty_provider_content_is_not_returned_as_an_answer(self) -> None:
+    def test_empty_provider_content_retries_with_fallback_model(self) -> None:
+        response = SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    message=SimpleNamespace(content="  ", refusal=None),
+                )
+            ]
+        )
+
+        with patch("app.gateway.portkey_client.client") as client_mock, patch(
+            "app.gateway.portkey_client.record_chat_usage"
+        ):
+            client_mock.chat.completions.create.side_effect = [
+                response,
+                SimpleNamespace(
+                    choices=[
+                        SimpleNamespace(
+                            message=SimpleNamespace(
+                                content="Aarush is a software engineer.",
+                                refusal=None,
+                            ),
+                        )
+                    ]
+                ),
+            ]
+            answer = call_llm(
+                user_query="Tell me about Aarush.",
+                context_chunks=[],
+                conversation_history=[],
+            )
+
+        self.assertEqual(answer, "Aarush is a software engineer.")
+        self.assertEqual(
+            [
+                call.kwargs["model"]
+                for call in client_mock.chat.completions.create.call_args_list
+            ],
+            ["openai/gpt-oss-120b", "openai/gpt-oss-20b"],
+        )
+
+    def test_empty_provider_content_after_fallback_is_not_returned(self) -> None:
         response = SimpleNamespace(
             choices=[
                 SimpleNamespace(
@@ -28,6 +68,7 @@ class EmptyModelAnswerTests(unittest.TestCase):
                     context_chunks=[],
                     conversation_history=[],
                 )
+        self.assertEqual(client_mock.chat.completions.create.call_count, 2)
 
     def test_provider_refusal_is_returned_when_completion_content_is_empty(self) -> None:
         response = SimpleNamespace(

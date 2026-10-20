@@ -19,6 +19,7 @@ MAX_CONTEXT_CHUNKS = 8
 MAX_CONTEXT_CHARS = 12000
 MAX_FOCUSED_PASSAGES = 3
 MAX_FOCUSED_PASSAGE_CHARS = 3000
+RESPONDER_MODELS = ("openai/gpt-oss-120b", "openai/gpt-oss-20b")
 
 # Single canonical message used whenever the available document evidence
 # does not support an answer.
@@ -356,29 +357,29 @@ def call_llm(
 
     # This goes through Portkey when a saved config is present, otherwise it
     # uses the direct Groq client selected above for local development.
-    response = client.chat.completions.create(
-        messages=messages,
-        model="openai/gpt-oss-120b",
-        temperature=0.0,
-    )
+    for model in RESPONDER_MODELS:
+        response = client.chat.completions.create(
+            messages=messages,
+            model=model,
+            temperature=0.0,
+        )
 
-    record_chat_usage("responder", response)
+        record_chat_usage("responder", response)
 
-    try:
-        choice = response.choices[0]
-    except (AttributeError, IndexError, TypeError) as exc:
-        raise EmptyLLMResponseError(
-            "The answer provider returned no completion choices."
-        ) from exc
+        try:
+            choice = response.choices[0]
+        except (AttributeError, IndexError, TypeError):
+            continue
 
-    message = getattr(choice, "message", None)
-    content = getattr(message, "content", None)
-    if not isinstance(content, str) or not content.strip():
+        message = getattr(choice, "message", None)
+        content = getattr(message, "content", None)
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
         refusal = getattr(message, "refusal", None)
         if isinstance(refusal, str) and refusal.strip():
             return refusal.strip()
-        raise EmptyLLMResponseError(
-            "The answer provider returned an empty completion."
-        )
 
-    return content.strip()
+    raise EmptyLLMResponseError(
+        "The primary and fallback answer models returned no usable text."
+    )
