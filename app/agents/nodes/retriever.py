@@ -17,7 +17,7 @@ from app.services.retrieval.vector_search import search
 from app.services.retrieval.reranker import rerank
 from app.services.retrieval.hyde import generate_hypothetical_document
 from app.services.retrieval.multi_query import expand_query
-from app.agents.relevance import MIN_RERANK_SCORE
+from app.agents.relevance import is_relevant_rerank_score
 from app.security.access_control import (
     Classification,
     ROLE_CLASSIFICATIONS,
@@ -114,7 +114,7 @@ def _has_relevant_restricted_evidence(
     )
     return any(
         isinstance(candidate.get("rerank_score"), (int, float))
-        and candidate["rerank_score"] >= MIN_RERANK_SCORE
+        and is_relevant_rerank_score(candidate["rerank_score"])
         for candidate in ranked_restricted_candidates
     )
 
@@ -233,7 +233,8 @@ def retriever_node(state: dict) -> dict:
         if isinstance(chunk.get("rerank_score"), (int, float))
     ]
     authorized_evidence_is_weak = not reranked_chunks or (
-        bool(scored_chunks) and max(scored_chunks) < MIN_RERANK_SCORE
+        bool(scored_chunks)
+        and not any(is_relevant_rerank_score(score) for score in scored_chunks)
     )
     restricted_evidence_found = False
     if authorized_evidence_is_weak:

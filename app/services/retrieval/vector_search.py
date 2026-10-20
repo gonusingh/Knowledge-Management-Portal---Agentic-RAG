@@ -317,6 +317,40 @@ def delete_document(document_id: str, tenant: str) -> None:
     )
 
 
+def delete_stale_document_chunks(
+    document_id: str,
+    tenant: str,
+    chunk_count: int,
+) -> None:
+    """Remove obsolete trailing chunks after a successful document reindex."""
+    if chunk_count < 1:
+        raise ValueError("A reindexed document must contain at least one chunk.")
+
+    ensure_collection_exists()
+    client.delete(
+        collection_name=COLLECTION_NAME,
+        points_selector=models.FilterSelector(
+            filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key="document_id",
+                        match=models.MatchValue(value=document_id),
+                    ),
+                    models.FieldCondition(
+                        key="tenant",
+                        match=models.MatchValue(value=tenant),
+                    ),
+                    models.FieldCondition(
+                        key="chunk_index",
+                        range=models.Range(gte=chunk_count),
+                    ),
+                ]
+            )
+        ),
+        wait=True,
+    )
+
+
 def search(
     query: str,
     user: UserContext,

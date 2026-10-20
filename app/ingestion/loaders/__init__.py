@@ -9,6 +9,7 @@ the original document was.
 
 import hashlib
 import os
+import zipfile
 from pathlib import Path
 
 # Each of these is a separate library, one per file format, already in
@@ -16,8 +17,18 @@ from pathlib import Path
 # place in the app that needs to know about file-format-specific parsing.
 import pypdf
 import pdfplumber
+from pdfplumber.utils.exceptions import (
+    MalformedPDFException,
+    PdfminerException,
+)
+from pdfminer.pdfdocument import PDFEncryptionError
+from pdfminer.pdfparser import PDFException, PDFSyntaxError
 from docx import Document as DocxDocument
+from docx.opc.exceptions import PackageNotFoundError as DocxPackageNotFoundError
+from docx.table import Table
+from docx.text.paragraph import Paragraph
 from pptx import Presentation
+from pptx.exc import PackageNotFoundError as PptxPackageNotFoundError
 from bs4 import BeautifulSoup
 
 from app.security.access_control import (
@@ -28,52 +39,104 @@ from app.security.access_control import (
 
 
 def _load_pdf(file_path: str) -> str:
-    """
-    Try the fast parser (pypdf) first. If it returns very little text
-    (a strong signal the PDF is scanned/complex and pypdf choked on it),
-    fall back to the slower but more robust pdfplumber.
-    """
-    text_parts = []
+    """Compare both supported parsers and retain the more complete text."""
+    extracted_texts = []
+    parser_errors = []
 
-    with open(file_path, "rb") as f:
-        reader = pypdf.PdfReader(f)
+    try:
+        with open(file_path, "rb") as file_handle:
+            reader = pypdf.PdfReader(file_handle)
+            extracted_texts.append(
+                "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+            )
+    except (OSError, ValueError, pypdf.errors.PdfReadError) as exc:
+        parser_errors.append(exc)
 
-        for page in reader.pages:
-            text_parts.append(page.extract_text() or "")
-
-    text = "\n".join(text_parts).strip()
-
-    # Heuristic: fewer than 50 characters total across the whole PDF is
-    # almost certainly a failed extraction.
-    if len(text) < 50:
-        text_parts = []
-
+    try:
         with pdfplumber.open(file_path) as pdf:
-            for page in pdf.pages:
-                text_parts.append(page.extract_text() or "")
+            extracted_texts.append(
+                "\n".join(page.extract_text() or "" for page in pdf.pages).strip()
+            )
+    except (
+        OSError,
+        ValueError,
+        PDFException,
+        PDFSyntaxError,
+        PDFEncryptionError,
+        MalformedPDFException,
+        PdfminerException,
+    ) as exc:
+        parser_errors.append(exc)
 
-        text = "\n".join(text_parts).strip()
+    if not extracted_texts:
+        error = ValueError(
+            "The PDF could not be parsed by either supported parser."
+        )
+        if parser_errors:
+            raise error from parser_errors[-1]
+        raise error
 
-    return text
+    return max(
+        extracted_texts,
+        key=lambda candidate: (
+            sum(character.isalnum() for character in candidate),
+            len(candidate),
+        ),
+    )
 
 
 def _load_docx(file_path: str) -> str:
     """
-    Extract DOCX paragraphs while preserving paragraph boundaries.
+    Extract DOCX paragraphs and table rows while preserving paragraph counts.
 
     The chunker uses blank lines (\\n\\n) to identify paragraph
-    boundaries, so DOCX paragraphs must be joined using two newlines.
+    boundaries, so DOCX paragraphs must be joined using two newlines. Table
+    rows stay inside the adjacent paragraph to keep trusted section indexes
+    aligned with the source document's paragraph sequence.
     """
-    doc = DocxDocument(file_path)
+    try:
+        doc = DocxDocument(file_path)
+    except (OSError, zipfile.BadZipFile, DocxPackageNotFoundError) as exc:
+        raise ValueError(f"Could not parse DOCX document: {exc}") from exc
+    body_parts = []
+    pending_table_rows = []
 
-    return "\n\n".join(
-        p.text
-        for p in doc.paragraphs
-    )
+    for child in doc.element.body.iterchildren():
+        if child.tag.endswith("}p"):
+            paragraph = Paragraph(child, doc)
+            if paragraph.text.strip():
+                if pending_table_rows:
+                    paragraph_text = "\n".join(
+                        [*pending_table_rows, paragraph.text]
+                    )
+                    pending_table_rows.clear()
+                else:
+                    paragraph_text = paragraph.text
+                body_parts.append(paragraph_text)
+        elif child.tag.endswith("}tbl"):
+            table = Table(child, doc)
+            for row in table.rows:
+                cells = [" ".join(cell.text.split()) for cell in row.cells]
+                if any(cells):
+                    row_text = " | ".join(cells)
+                    if body_parts:
+                        body_parts[-1] += "\n" + row_text
+                    else:
+                        pending_table_rows.append(row_text)
+
+    if pending_table_rows:
+        if body_parts:
+            body_parts[-1] += "\n" + "\n".join(pending_table_rows)
+        else:
+            body_parts.append("\n".join(pending_table_rows))
+    return "\n\n".join(body_parts)
 
 
 def _load_pptx(file_path: str) -> str:
-    prs = Presentation(file_path)
+    try:
+        prs = Presentation(file_path)
+    except (OSError, zipfile.BadZipFile, PptxPackageNotFoundError) as exc:
+        raise ValueError(f"Could not parse PowerPoint document: {exc}") from exc
     text_parts = []
 
     # A .pptx file is a list of slides; each slide is a list of shapes.

@@ -44,6 +44,7 @@ from app.ingestion.trusted_policy import (
 )
 from app.services.retrieval.vector_search import (
     delete_document,
+    delete_stale_document_chunks,
     document_exists,
     get_document_metadata,
     list_documents,
@@ -371,19 +372,12 @@ async def upload_document(
                     document_digest,
                     tenant=user.tenant,
                 )
-
-            return {
-                "filename": existing_metadata.get(
-                    "source_file",
-                    Path(file.filename or "uploaded_document").name,
-                ),
-                "document_id": document_digest,
-                "version": existing_metadata.get("version") or document_digest,
-                "chunks_added": 0,
-                "classification": existing_metadata.get("classification"),
-                "reused": True,
-                "status": "success",
-            }
+            filename = existing_metadata.get(
+                "source_file",
+                Path(file.filename or "uploaded_document").name,
+            )
+        else:
+            filename = Path(file.filename or "uploaded_document").name
 
         access_metadata = build_document_access_metadata(
             document_id=document_digest,
@@ -405,9 +399,10 @@ async def upload_document(
             doc_type="true_data",
             access_metadata=access_metadata,
         )
-        document["source_file"] = Path(
-            file.filename or "uploaded_document"
-        ).name
+        document["source_file"] = filename
+        trusted_sections = trusted_sections_for_document(document_digest)
+        if trusted_sections:
+            document["trusted_sections"] = trusted_sections
 
         chunks = chunk_document(document)
         if not chunks:
@@ -417,14 +412,20 @@ async def upload_document(
             )
 
         upsert_chunks(chunks)
+        delete_stale_document_chunks(
+            document_digest,
+            tenant=user.tenant,
+            chunk_count=len(chunks),
+        )
 
         return {
-            "filename": Path(file.filename or "uploaded_document").name,
+            "filename": filename,
             "document_id": document_digest,
             "version": document_digest,
             "chunks_added": len(chunks),
             "classification": access_metadata.classification.value,
-            "reused": False,
+            "reused": existing_metadata is not None,
+            "reindexed": existing_metadata is not None,
             "status": "success",
         }
 

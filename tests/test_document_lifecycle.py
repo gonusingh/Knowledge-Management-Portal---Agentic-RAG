@@ -22,7 +22,7 @@ class DocumentLifecycleTests(unittest.TestCase):
     def tearDown(self) -> None:
         main_module.app.dependency_overrides = self.original_overrides
 
-    def test_unchanged_upload_reuses_existing_content_hash_without_upserting(self) -> None:
+    def test_unchanged_upload_reindexes_existing_content_hash(self) -> None:
         content = b"Active document lifecycle test."
         with patch(
             "app.main.get_document_metadata",
@@ -34,7 +34,9 @@ class DocumentLifecycleTests(unittest.TestCase):
                     "classification": "RESTRICTED",
                 },
             ],
-        ), patch("app.main.upsert_chunks") as upsert:
+        ), patch("app.main.upsert_chunks") as upsert, patch(
+            "app.main.delete_stale_document_chunks"
+        ) as delete_stale:
             first = self.client.post(
                 "/upload",
                 files={"file": ("notes.txt", content, "text/plain")},
@@ -53,15 +55,38 @@ class DocumentLifecycleTests(unittest.TestCase):
         self.assertEqual(first.json()["version"], second.json()["version"])
         self.assertFalse(first.json()["reused"])
         self.assertTrue(second.json()["reused"])
-        self.assertEqual(second.json()["chunks_added"], 0)
-        upsert.assert_called_once()
-        indexed_chunk = upsert.call_args.args[0][0]
+        self.assertTrue(second.json()["reindexed"])
+        self.assertEqual(second.json()["chunks_added"], 1)
+        self.assertEqual(upsert.call_count, 2)
+        indexed_chunk = upsert.call_args_list[0].args[0][0]
         expected_hash = hashlib.sha256(content).hexdigest()
         self.assertEqual(first.json()["document_id"], expected_hash)
         self.assertEqual(indexed_chunk["version"], expected_hash)
         self.assertEqual(indexed_chunk["classification"], "RESTRICTED")
         self.assertEqual(indexed_chunk["allowed_roles"], ["administrator"])
         self.assertEqual(indexed_chunk["source_file"], "notes.txt")
+        refreshed_chunk = upsert.call_args_list[1].args[0][0]
+        self.assertEqual(refreshed_chunk["text"], content.decode())
+        self.assertEqual(refreshed_chunk["source_file"], "notes.txt")
+        self.assertEqual(
+            delete_stale.call_args_list[-1].args,
+            (expected_hash,),
+        )
+        self.assertEqual(
+            delete_stale.call_args_list[-1].kwargs,
+            {"tenant": "nimbuspay", "chunk_count": 1},
+        )
+
+    def test_invalid_docx_upload_returns_a_parsing_error(self) -> None:
+        with patch("app.main.get_document_metadata", return_value=None):
+            response = self.client.post(
+                "/upload",
+                files={"file": ("broken.docx", b"not a DOCX package")},
+                headers={"X-Demo-User": "carol"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Could not parse DOCX", response.json()["detail"])
 
     def test_remove_requires_admin_and_deletes_document_vectors(self) -> None:
         document_id = "b" * 64

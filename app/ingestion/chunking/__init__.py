@@ -43,6 +43,24 @@ def _split_into_paragraphs(text: str) -> list[str]:
     ]
 
 
+def _split_oversized_paragraph(paragraph: str) -> list[str]:
+    """Split long extracted lines at whitespace so no retrieval chunk is unbounded."""
+    pieces = []
+    remaining = paragraph.strip()
+
+    while len(remaining) > MAX_CHUNK_CHARS:
+        split_at = remaining.rfind(" ", 0, MAX_CHUNK_CHARS + 1)
+        if split_at <= 0:
+            split_at = MAX_CHUNK_CHARS
+        pieces.append(remaining[:split_at].strip())
+        remaining = remaining[split_at:].strip()
+
+    if remaining:
+        pieces.append(remaining)
+
+    return pieces
+
+
 def _section_for_paragraph(
     paragraph_index: int,
     trusted_sections: list[dict],
@@ -129,6 +147,11 @@ def chunk_document(document: dict) -> list[dict]:
 
     trusted_sections = document.get("trusted_sections", [])
 
+    paragraph_parts = [
+        (part, _section_for_paragraph(paragraph_index, trusted_sections))
+        for paragraph_index, paragraph in enumerate(paragraphs)
+        for part in _split_oversized_paragraph(paragraph)
+    ]
     chunks: list[tuple[str, dict | None]] = []
 
     current_chunk_text = ""
@@ -148,13 +171,7 @@ def chunk_document(document: dict) -> list[dict]:
             current_chunk_text = ""
             current_acl = None
 
-    for paragraph_index, paragraph in enumerate(paragraphs):
-
-        # Determine trusted ACL metadata for this paragraph.
-        paragraph_acl = _section_for_paragraph(
-            paragraph_index,
-            trusted_sections,
-        )
+    for paragraph, paragraph_acl in paragraph_parts:
 
         # If section-level ACL exists, ensure chunks never cross
         # a section boundary.
@@ -164,21 +181,6 @@ def chunk_document(document: dict) -> list[dict]:
         # Start the current chunk with this paragraph's ACL.
         if not current_chunk_text:
             current_acl = paragraph_acl
-
-        # A single paragraph larger than MAX_CHUNK_CHARS is intentionally
-        # preserved as one chunk. We do not split technical content
-        # arbitrarily in the middle of a paragraph.
-        if len(paragraph) > MAX_CHUNK_CHARS:
-            flush_current_chunk()
-
-            chunks.append(
-                (
-                    paragraph,
-                    paragraph_acl,
-                )
-            )
-
-            continue
 
         # Would adding this paragraph exceed the limit?
         additional_length = (

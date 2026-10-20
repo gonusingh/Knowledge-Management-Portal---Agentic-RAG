@@ -6,7 +6,10 @@ conversational) — the difference is just whether reranked_chunks is
 populated or empty by the time this node runs.
 """
 
-from app.agents.relevance import MIN_RERANK_SCORE
+from app.agents.relevance import (
+    MIN_RERANK_SCORE,
+    is_relevant_rerank_score,
+)
 from app.gateway.portkey_client import (
     ACCESS_DENIED_MESSAGE,
     NO_EVIDENCE_MESSAGE,
@@ -52,7 +55,10 @@ def responder_node(state: dict) -> dict:
     best_score = _best_rerank_score(context_chunks) if context_chunks else None
     relevance_is_weak = (
         not context_chunks
-        or (best_score is not None and best_score < MIN_RERANK_SCORE)
+        or (
+            best_score is not None
+            and not is_relevant_rerank_score(best_score, MIN_RERANK_SCORE)
+        )
     )
     if state.get("intent") == "technical" and relevance_is_weak:
         answer = (
@@ -64,8 +70,8 @@ def responder_node(state: dict) -> dict:
             reason = "no authorized context reached the model"
         else:
             reason = (
-                f"best rerank score {best_score:.4f} is below "
-                f"relevance floor {MIN_RERANK_SCORE:.4f}"
+                f"best rerank score {best_score:.6f} is below "
+                f"relevance floor {MIN_RERANK_SCORE:.6f}"
             )
         return {
             "final_answer": answer,

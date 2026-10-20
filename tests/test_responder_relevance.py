@@ -60,6 +60,17 @@ class ResponderRelevanceFloorTests(unittest.TestCase):
         _, call_llm = self.run_node([chunk(0.01)], floor=0.01)
         call_llm.assert_called_once()
 
+    def test_score_rounded_to_floor_is_allowed(self):
+        result, call_llm = self.run_node([chunk(0.00996)], floor=0.01)
+
+        call_llm.assert_called_once()
+        self.assertIn("Best rerank score: 0.0100", result["trace"])
+
+    def test_score_below_rounding_tolerance_still_abstains(self):
+        _, call_llm = self.run_node([chunk(0.00994)], floor=0.01)
+
+        call_llm.assert_not_called()
+
     def test_unscored_chunks_are_not_judged_by_the_floor(self):
         _, call_llm = self.run_node([chunk(None)])
         call_llm.assert_called_once()

@@ -189,7 +189,9 @@ st.markdown(
         font-family: Inter, "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
     }
     [data-testid="stMainBlockContainer"] {
-        padding-top: 1rem !important;
+        padding-top: 4rem !important;
+        box-sizing: border-box;
+        min-width: 0;
     }
     [data-testid="stAppViewContainer"],
     [data-testid="stMain"],
@@ -207,12 +209,16 @@ st.markdown(
         background: var(--portal-sidebar);
     }
     .block-container {
+        box-sizing: border-box;
+        width: 100%;
         max-width: 1160px;
-        padding: 1.25rem 3rem 1.5rem;
+        min-width: 0;
+        padding: 1.25rem 2rem 1.5rem;
     }
     .portal-heading {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 210px;
+        min-width: 0;
         align-items: center;
         gap: 1.5rem;
         min-height: 145px;
@@ -227,6 +233,10 @@ st.markdown(
     .portal-heading h1,
     .assistant-intro h2 {
         color: var(--portal-text);
+    }
+    .hero-copy {
+        min-width: 0;
+        overflow-wrap: anywhere;
     }
     .portal-heading h1 {
         margin: 0;
@@ -651,6 +661,9 @@ st.markdown(
         .block-container {
             padding: 0.65rem 0.75rem 4.5rem;
         }
+        [data-testid="stMainBlockContainer"] {
+            padding-top: 3.5rem !important;
+        }
         .portal-heading {
             grid-template-columns: minmax(0, 1fr);
             min-height: auto;
@@ -680,6 +693,15 @@ st.markdown(
         }
         .assistant-intro p {
             font-size: 0.8rem;
+        }
+    }
+    @media (min-width: 641px) and (max-width: 920px) {
+        .portal-heading {
+            grid-template-columns: minmax(0, 1fr);
+            min-height: auto;
+        }
+        .hero-art {
+            display: none;
         }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -928,7 +950,12 @@ with st.sidebar:
                 st.session_state.active_document_id = data["document_id"]
                 st.session_state.active_document_filename = data["filename"]
                 st.session_state.active_document_version = data["version"]
-                if data["reused"]:
+                if data.get("reindexed"):
+                    st.success(
+                        f"Refreshed {data['chunks_added']} indexed chunks "
+                        f"from {data['filename']}."
+                    )
+                elif data["reused"]:
                     st.info(f"Reused the existing indexed version of {data['filename']}.")
                 else:
                     st.success(
