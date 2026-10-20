@@ -8,11 +8,21 @@ Talks to the FastAPI backend's /query endpoint. Run with:
 """
 
 import os
+import sys
 from html import escape
+from pathlib import Path
 from textwrap import dedent
 
 import requests
 import streamlit as st
+
+PROJECT_ROOT = str(Path(__file__).resolve().parents[1])
+UI_DIRECTORY = str(Path(__file__).resolve().parent)
+if UI_DIRECTORY in sys.path:
+    sys.path.remove(UI_DIRECTORY)
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
 from app.services.source_evidence import (
     distinct_source_count,
     extract_selected_sources,
