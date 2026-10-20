@@ -1160,7 +1160,9 @@ for message_index, message in enumerate(st.session_state.messages):
     avatar = ":material/auto_awesome:" if is_assistant else ":material/person:"
     with st.chat_message(message["role"], avatar=avatar):
         st.caption("Knowledge Assistant" if is_assistant else "You")
-        if message.get("blocked"):
+        if message.get("error"):
+            st.error(message["content"])
+        elif message.get("blocked"):
             st.warning(message["content"])
         else:
             if is_assistant:
@@ -1247,8 +1249,20 @@ if user_input:
                 response.raise_for_status()
                 data = response.json()
             except requests.RequestException as exc:
-                st.error(backend_request_error(exc))
-                st.stop()
+                error_message = backend_request_error(exc)
+                st.session_state.messages.extend([
+                    {"role": "user", "content": user_input},
+                    {
+                        "role": "assistant",
+                        "content": error_message,
+                        "question": user_input,
+                        "blocked": False,
+                        "error": True,
+                        "trace": [],
+                        "answer_length": None,
+                    },
+                ])
+                st.rerun()
             st.session_state.latest_query_failed = False
 
         if data.get("blocked"):
