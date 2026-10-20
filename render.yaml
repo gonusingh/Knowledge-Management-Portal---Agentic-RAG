@@ -5,6 +5,7 @@ services:
     plan: free
     buildCommand: pip install -r requirements-render.txt
     startCommand: python scripts/start_render.py
+    autoDeployTrigger: commit
     healthCheckPath: /
     envVars:
       - key: BACKEND_URL
