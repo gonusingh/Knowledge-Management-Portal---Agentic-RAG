@@ -150,13 +150,14 @@ st.markdown(
     dedent("""
     <style>
     :root {
-        --portal-bg: #07111f;
-        --portal-sidebar: #0b1728;
-        --portal-panel: #0d1b2e;
-        --portal-border: #203650;
-        --portal-text: #e8eef7;
-        --portal-muted: #93a4ba;
-        --portal-blue: #3b82f6;
+        --portal-bg: #081321;
+        --portal-sidebar: #0b1726;
+        --portal-panel: #101e30;
+        --portal-border: #26394f;
+        --portal-text: #e7edf5;
+        --portal-muted: #9eacbd;
+        --portal-blue: #5b91d6;
+        --portal-teal: #72b8ad;
     }
     body {
         font-family: Inter, "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -197,11 +198,11 @@ st.markdown(
         min-height: 145px;
         padding: 1rem 1.35rem;
         margin-bottom: 0.75rem;
-        border: 1px solid #1c3552;
+        border: 1px solid #263b53;
         border-radius: 10px;
         background:
-            radial-gradient(ellipse at 90% 80%, rgba(22, 83, 159, 0.18), transparent 40%),
-            linear-gradient(115deg, #0d1b2e 0%, #0b192d 65%, #0b1d36 100%);
+            radial-gradient(ellipse at 90% 80%, rgba(53, 102, 158, 0.1), transparent 42%),
+            linear-gradient(115deg, #101e30 0%, #0d1a2b 68%, #102037 100%);
     }
     .portal-heading h1,
     .assistant-intro h2 {
@@ -220,10 +221,10 @@ st.markdown(
     }
     .portal-kicker {
         margin: 0 0 0.5rem;
-        color: #7eb6ff;
-        font-size: 0.68rem;
-        font-weight: 700;
-        letter-spacing: 0.13em;
+        color: #9bb6d4;
+        font-size: 0.7rem;
+        font-weight: 650;
+        letter-spacing: 0.08em;
     }
     .portal-subtitle {
         margin: 0.3rem 0 0;
@@ -232,7 +233,7 @@ st.markdown(
     }
     .active-document-pill {
         margin: 0.45rem 0 0;
-        color: #b8d9fb;
+        color: #c0d2e5;
         font-size: 0.72rem;
         font-weight: 600;
         overflow-wrap: anywhere;
@@ -251,7 +252,7 @@ st.markdown(
         padding: 25px 12px 10px;
         border: 1px solid #3b79bc;
         border-radius: 8px;
-        background: linear-gradient(155deg, #1b4d83, #102a4a 82%);
+        background: linear-gradient(155deg, #1b3f63, #132a44 82%);
         box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
         animation: document-float 4.2s ease-in-out infinite;
     }
@@ -262,7 +263,7 @@ st.markdown(
         width: 27px;
         height: 4px;
         border-radius: 2px;
-        background: #64b5ff;
+        background: #83b1df;
         content: "";
     }
     .hero-document::after {
@@ -300,8 +301,8 @@ st.markdown(
         place-items: center;
         border: 1px solid #2c5c8b;
         border-radius: 50%;
-        background: #102747;
-        color: #8fc6ff;
+        background: #14273d;
+        color: #bfd2e7;
         animation: document-blink 3.6s ease-in-out infinite;
     }
     @keyframes document-float {
@@ -326,7 +327,7 @@ st.markdown(
         padding: 0.3rem 0.6rem;
         border: 1px solid #254664;
         border-radius: 999px;
-        background: rgba(8, 22, 39, 0.72);
+        background: rgba(10, 23, 39, 0.78);
         color: #a8bdd3;
         font-size: 0.67rem;
         line-height: 1.25;
@@ -335,10 +336,10 @@ st.markdown(
         width: 14px;
         height: 14px;
         flex: 0 0 14px;
-        color: #60b9f0;
+        color: var(--portal-teal);
     }
     .trust-pill strong {
-        color: #dce8f5;
+        color: #d5e0ec;
         font-weight: 600;
     }
     .sidebar-security {
@@ -355,7 +356,7 @@ st.markdown(
         width: 19px;
         height: 19px;
         flex: 0 0 19px;
-        color: #4cc8d8;
+        color: var(--portal-teal);
     }
     .sidebar-security strong {
         display: block;
@@ -386,8 +387,8 @@ st.markdown(
         flex: 0 0 36px;
         border: 1px solid #31516f;
         border-radius: 9px;
-        background: #10243a;
-        color: #a8d7ff;
+        background: #13243a;
+        color: #bfd2e7;
         font-size: 16px;
         font-weight: 700;
     }
@@ -406,11 +407,10 @@ st.markdown(
     }
     .workspace-label {
         margin: 1.1rem 0 0.45rem;
-        color: #aab9cb;
-        font-size: 0.69rem;
-        font-weight: 700;
-        letter-spacing: 0.1em;
-        text-transform: uppercase;
+        color: #afbac8;
+        font-size: 0.72rem;
+        font-weight: 650;
+        letter-spacing: 0.04em;
     }
     .source-record {
         padding: 0.65rem 0;
@@ -453,7 +453,7 @@ st.markdown(
         border: 1px solid #2869a8;
         border-radius: 50%;
         background: #0b213a;
-        color: #8bc7ff;
+        color: #a9c5e4;
         font-size: 1.25rem;
     }
     [data-testid="stVerticalBlockBorderWrapper"] {
@@ -489,14 +489,14 @@ st.markdown(
         color: #b9d9f6;
     }
     [data-testid="stChatInput"] {
-        border: 1px solid #2a4562;
+        border: 1px solid #31445c;
         border-radius: 11px;
         background: var(--portal-panel);
         box-shadow: none;
     }
     [data-testid="stChatInput"]:focus-within {
-        border-color: #5596e8;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+        border-color: #6b9bd2;
+        box-shadow: 0 0 0 2px rgba(91, 145, 214, 0.16);
     }
     [data-testid="stChatInput"] textarea {
         color: var(--portal-text);
@@ -511,14 +511,14 @@ st.markdown(
     }
     [data-testid="stForm"] [data-testid="stTextInput"] input {
         min-height: 2.7rem;
-        border: 1px solid #2a4562;
+        border: 1px solid #31445c;
         border-radius: 11px;
         background: var(--portal-panel);
         color: var(--portal-text);
     }
     [data-testid="stForm"] [data-testid="stTextInput"] input:focus {
-        border-color: #5596e8;
-        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+        border-color: #6b9bd2;
+        box-shadow: 0 0 0 2px rgba(91, 145, 214, 0.16);
     }
     [data-testid="stForm"] button {
         min-height: 2.7rem;
@@ -542,7 +542,7 @@ st.markdown(
     [data-testid="stButton"] > button:focus-visible,
     [data-testid="stChatInput"] textarea:focus-visible,
     [data-testid="stSelectbox"] [role="combobox"]:focus-visible {
-        outline: 2px solid #79b5ff;
+        outline: 2px solid #8cb1dc;
         outline-offset: 2px;
     }
     [data-testid="stChatInputSubmitButton"] {
@@ -999,21 +999,21 @@ latest_sources = (
     else []
 )
 if document_library_error:
-    source_metric_label = "AVAILABLE DOCUMENTS"
+    source_metric_label = "Available documents"
     trusted_sources_value = "Unavailable"
     trusted_sources_detail = "Document library could not be reached."
 elif st.session_state.latest_query_failed:
-    source_metric_label = "RETRIEVED SOURCES"
+    source_metric_label = "Retrieved sources"
     trusted_sources_value = "Unavailable"
     trusted_sources_detail = "The latest query did not complete successfully."
 elif latest_assistant_message is not None and not latest_assistant_message.get("blocked"):
-    source_metric_label = "RETRIEVED SOURCES"
+    source_metric_label = "Retrieved sources"
     trusted_sources_value = str(distinct_source_count(latest_sources))
     trusted_sources_detail = (
         "Distinct source documents in the latest authorized retrieval trace."
     )
 else:
-    source_metric_label = "AVAILABLE DOCUMENTS"
+    source_metric_label = "Available documents"
     trusted_sources_value = str(len(available_document_ids))
     trusted_sources_detail = (
         f"{active_document_count} active in this conversation."
@@ -1049,8 +1049,8 @@ trust_items = (
         trusted_sources_value,
         trusted_sources_detail,
     ),
-    ("SECURE ACCESS", current_access, access_detail),
-    ("EVIDENCE-BACKED ANSWERS", evidence_value, evidence_detail),
+    ("Secure access", current_access, access_detail),
+    ("Evidence-backed answers", evidence_value, evidence_detail),
 )
 trust_icons = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 19 6v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3Z"/><path d="m9 12 2 2 4-4"/></svg>',
@@ -1078,7 +1078,7 @@ active_document_pill = (
 st.markdown(
     "<div class='portal-heading'>"
     "<div class='hero-copy'>"
-    "<p class='portal-kicker'>KNOWLEDGE WORKSPACE</p>"
+    "<p class='portal-kicker'>Knowledge workspace</p>"
     "<h1>Knowledge Management Portal</h1>"
     "<p class='portal-subtitle'>Enterprise Knowledge Workspace · Find answers across your authorized documents.</p>"
     f"{active_document_pill}"
