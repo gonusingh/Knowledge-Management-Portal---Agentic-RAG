@@ -162,23 +162,33 @@ def document_exists(document_id: str, tenant: str) -> bool:
     return get_document_metadata(document_id, tenant) is not None
 
 
-def list_documents(tenant: str) -> list[dict]:
-    """Return the unique indexed documents for a tenant with their stored ACL metadata."""
+def list_documents(
+    tenant: str,
+    *,
+    user: UserContext | None = None,
+) -> list[dict]:
+    """Return indexed documents, scoped to a user's authorization when supplied."""
     ensure_collection_exists()
     unique_documents: dict[str, dict] = {}
     offset = None
+    if user is not None:
+        if user.tenant != tenant:
+            raise ValueError("Document listing tenant must match the user's tenant.")
+        document_filter = build_authorization_filter(user)
+    else:
+        document_filter = models.Filter(
+            must=[
+                models.FieldCondition(
+                    key="tenant",
+                    match=models.MatchValue(value=tenant),
+                )
+            ]
+        )
 
     while True:
         response = client.scroll(
             collection_name=COLLECTION_NAME,
-            scroll_filter=models.Filter(
-                must=[
-                    models.FieldCondition(
-                        key="tenant",
-                        match=models.MatchValue(value=tenant),
-                    )
-                ]
-            ),
+            scroll_filter=document_filter,
             limit=100,
             offset=offset,
             with_payload=True,

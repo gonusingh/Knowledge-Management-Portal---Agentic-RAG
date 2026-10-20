@@ -63,6 +63,10 @@ _QUERY_STOP_WORDS = {
 }
 
 
+class EmptyLLMResponseError(RuntimeError):
+    """Raised when the model provider returns no usable answer text."""
+
+
 def _focused_passages(
     context_chunks: list[dict],
     user_query: str,
@@ -360,4 +364,21 @@ def call_llm(
 
     record_chat_usage("responder", response)
 
-    return response.choices[0].message.content
+    try:
+        choice = response.choices[0]
+    except (AttributeError, IndexError, TypeError) as exc:
+        raise EmptyLLMResponseError(
+            "The answer provider returned no completion choices."
+        ) from exc
+
+    message = getattr(choice, "message", None)
+    content = getattr(message, "content", None)
+    if not isinstance(content, str) or not content.strip():
+        refusal = getattr(message, "refusal", None)
+        if isinstance(refusal, str) and refusal.strip():
+            return refusal.strip()
+        raise EmptyLLMResponseError(
+            "The answer provider returned an empty completion."
+        )
+
+    return content.strip()

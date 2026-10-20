@@ -34,6 +34,7 @@ from app.guardrails.guardrail_gate import (
     evaluate_output,
 )
 from app.agents.graph import compiled_graph
+from app.gateway.portkey_client import EmptyLLMResponseError
 from app.ingestion.chunking import chunk_document
 from app.ingestion.loaders import load_document
 from app.ingestion.policy_reindex import reindex_document_policy
@@ -272,10 +273,17 @@ def query(
         }
 
         graph_started = time.perf_counter()
-        result_state = compiled_graph.invoke(
-            initial_state,
-            config={"configurable": {"thread_id": thread_id}},
-        )
+        try:
+            result_state = compiled_graph.invoke(
+                initial_state,
+                config={"configurable": {"thread_id": thread_id}},
+            )
+        except EmptyLLMResponseError as exc:
+            logger.error("The answer provider returned no usable answer text.")
+            raise HTTPException(
+                status_code=502,
+                detail="The answer provider returned an empty response. Please retry.",
+            ) from exc
 
         trace.extend(result_state.get("trace", []))
         trace.append(f"Agent graph elapsed: {time.perf_counter() - graph_started:.1f}s")
@@ -439,7 +447,7 @@ def list_indexed_documents(
     """Return the documents already indexed for this tenant so the UI can select them without re-uploading."""
     if restore_default:
         ensure_default_demo_document(user.tenant)
-    return {"documents": list_documents(tenant=user.tenant)}
+    return {"documents": list_documents(tenant=user.tenant, user=user)}
 
 
 @app.delete("/documents/{document_id}")

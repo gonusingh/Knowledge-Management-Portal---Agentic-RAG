@@ -27,6 +27,26 @@ _SELECTED_SOURCE_PATTERN = re.compile(
 )
 
 
+def backend_request_error(exc: requests.RequestException) -> str:
+    """Show a safe API error detail when the backend provides one."""
+    status = exc.response.status_code if exc.response is not None else "connection error"
+    detail = None
+    if exc.response is not None:
+        try:
+            payload = exc.response.json()
+        except ValueError:
+            payload = None
+        if isinstance(payload, dict):
+            detail = payload.get("detail")
+
+    if isinstance(detail, str) and detail.strip():
+        return f"The backend request failed ({status}): {detail}"
+    return (
+        f"The backend request failed ({status}). "
+        "Check the FastAPI logs for the underlying error."
+    )
+
+
 def extract_selected_sources(trace: list[str]) -> list[dict[str, str]]:
     """Read only source metadata already emitted in the authorized retrieval trace."""
     sources = []
@@ -94,7 +114,7 @@ else:
 st.set_page_config(
     page_title="Knowledge Management Portal",
     page_icon="K",
-    initial_sidebar_state="auto",
+    initial_sidebar_state="collapsed",
 )
 
 if DEMO_AUTH_ENABLED and not PUBLIC_ROLE_SELECTOR:
@@ -168,13 +188,16 @@ st.markdown(
     body {
         font-family: Inter, "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
     }
+    [data-testid="stMainBlockContainer"] {
+        padding-top: 1rem !important;
+    }
     [data-testid="stAppViewContainer"],
     [data-testid="stMain"],
     [data-testid="stMainBlockContainer"] {
         background: var(--portal-bg);
         color: var(--portal-text);
     }
-    [data-testid="stSidebar"] {
+    [data-testid="stSidebar"][aria-expanded="true"] {
         background: var(--portal-sidebar);
         border-right: 1px solid var(--portal-border);
         min-width: 300px !important;
@@ -185,16 +208,16 @@ st.markdown(
     }
     .block-container {
         max-width: 1160px;
-        padding: 2rem 3rem 3rem;
+        padding: 1.25rem 3rem 1.5rem;
     }
     .portal-heading {
         display: grid;
         grid-template-columns: minmax(0, 1fr) 210px;
         align-items: center;
         gap: 1.5rem;
-        min-height: 175px;
-        padding: 1.2rem 1.5rem;
-        margin-bottom: 1rem;
+        min-height: 145px;
+        padding: 1rem 1.35rem;
+        margin-bottom: 0.75rem;
         border: 1px solid #1c3552;
         border-radius: 10px;
         background:
@@ -223,6 +246,13 @@ st.markdown(
         margin: 0.3rem 0 0;
         color: var(--portal-muted);
         font-size: 0.88rem;
+    }
+    .active-document-pill {
+        margin: 0.45rem 0 0;
+        color: #b8d9fb;
+        font-size: 0.72rem;
+        font-weight: 600;
+        overflow-wrap: anywhere;
     }
     .hero-art {
         position: relative;
@@ -399,27 +429,6 @@ st.markdown(
         letter-spacing: 0.1em;
         text-transform: uppercase;
     }
-    .document-list {
-        max-height: 190px;
-        overflow-y: auto;
-        margin: 0.4rem 0 0.65rem;
-        border-top: 1px solid var(--portal-border);
-    }
-    .document-row {
-        padding: 0.55rem 0.1rem;
-        border-bottom: 1px solid rgba(32, 54, 80, 0.75);
-    }
-    .document-name {
-        color: var(--portal-text);
-        font-size: 0.76rem;
-        line-height: 1.4;
-        overflow-wrap: anywhere;
-    }
-    .document-meta {
-        margin-top: 0.15rem;
-        color: var(--portal-muted);
-        font-size: 0.68rem;
-    }
     .source-record {
         padding: 0.65rem 0;
         border-bottom: 1px solid var(--portal-border);
@@ -438,7 +447,7 @@ st.markdown(
         font-size: 0.72rem;
     }
     .assistant-intro {
-        padding: 1.35rem 0 1rem;
+        padding: 0.9rem 0 0.7rem;
         text-align: center;
     }
     .assistant-intro h2 {
@@ -457,7 +466,7 @@ st.markdown(
         width: 42px;
         height: 42px;
         place-items: center;
-        margin: 0 auto 0.75rem;
+        margin: 0 auto 0.55rem;
         border: 1px solid #2869a8;
         border-radius: 50%;
         background: #0b213a;
@@ -512,6 +521,25 @@ st.markdown(
     [data-testid="stChatInput"] textarea::placeholder {
         color: #8193a9;
     }
+    [data-testid="stForm"] {
+        padding: 0;
+        border: 0;
+        background: transparent;
+    }
+    [data-testid="stForm"] [data-testid="stTextInput"] input {
+        min-height: 2.7rem;
+        border: 1px solid #2a4562;
+        border-radius: 11px;
+        background: var(--portal-panel);
+        color: var(--portal-text);
+    }
+    [data-testid="stForm"] [data-testid="stTextInput"] input:focus {
+        border-color: #5596e8;
+        box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+    }
+    [data-testid="stForm"] button {
+        min-height: 2.7rem;
+    }
     [data-testid="stButton"] > button,
     [data-testid="stDownloadButton"] > button {
         min-height: 2.35rem;
@@ -542,6 +570,14 @@ st.markdown(
         white-space: normal;
         overflow-wrap: anywhere;
         background: var(--portal-panel);
+    }
+    body:has([data-testid="stChatInput"]:focus-within)
+    [data-testid="st-key-suggested-prompts"] {
+        display: none;
+    }
+    body:has([data-testid="stForm"] [data-testid="stTextInput"] input:focus)
+    [data-testid="st-key-suggested-prompts"] {
+        display: none;
     }
     [data-testid="stChatInputSubmitButton"] {
         width: 38px;
@@ -613,20 +649,19 @@ st.markdown(
     }
     @media (max-width: 640px) {
         .block-container {
-            padding: 1.25rem 1rem 2rem;
+            padding: 0.65rem 0.75rem 4.5rem;
         }
         .portal-heading {
             grid-template-columns: minmax(0, 1fr);
             min-height: auto;
-            padding: 1.1rem;
-            padding-bottom: 1rem;
-            margin-bottom: 1rem;
+            padding: 0.8rem;
+            margin-bottom: 0.55rem;
         }
         .portal-heading h1 {
             font-size: 1.2rem;
         }
         .assistant-intro {
-            padding-top: 1.1rem;
+            padding: 0.7rem 0 0.55rem;
         }
         .hero-art {
             display: none;
@@ -636,6 +671,15 @@ st.markdown(
         }
         .trust-pill {
             white-space: normal;
+            font-size: 0.62rem;
+            min-height: 27px;
+            padding: 0.25rem 0.45rem;
+        }
+        .assistant-intro h2 {
+            font-size: 1.05rem;
+        }
+        .assistant-intro p {
+            font-size: 0.8rem;
         }
     }
     @media (prefers-reduced-motion: reduce) {
@@ -651,6 +695,15 @@ st.markdown(
 )
 
 DEFAULT_DEMO_DOCUMENT = "NimbusPay_Enterprise_Policy_Handbook_Demo.docx"
+
+# Conversation state is initialized before sidebar controls so document access
+# changes can safely clear any conversation tied to a now-hidden source.
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "thread_id" not in st.session_state:
+    st.session_state.thread_id = None
+if "pending_refinement" not in st.session_state:
+    st.session_state.pending_refinement = None
 
 # Active-document state lives only in this Streamlit session. It is never
 # restored from Qdrant, so a restart cannot silently reactivate a document.
@@ -737,26 +790,22 @@ with st.sidebar:
             f"Document library unavailable ({status}). Check the API connection and retry."
         )
 
-    st.markdown("#### Document library")
+    if not document_library_error:
+        available_ids = {doc.get("document_id") for doc in indexed_documents}
+        if (
+            st.session_state.active_document_id
+            and st.session_state.active_document_id not in available_ids
+        ):
+            st.session_state.active_document_id = None
+            st.session_state.active_document_filename = None
+            st.session_state.active_document_version = None
+            st.session_state.messages = []
+            st.session_state.thread_id = None
+            st.session_state.pending_refinement = None
+
     if document_library_error:
         st.warning(document_library_error)
     elif indexed_documents:
-        st.caption(f"{len(indexed_documents)} indexed document(s)")
-        document_rows = []
-        for document in indexed_documents:
-            filename = str(document.get("source_file") or "Untitled document")
-            classification = str(document.get("classification") or "Classification unavailable")
-            document_rows.append(
-                "<div class='document-row'>"
-                f"<div class='document-name' title='{escape(filename, quote=True)}'>"
-                f"{escape(filename)}</div>"
-                f"<div class='document-meta'>{escape(classification)}</div>"
-                "</div>"
-            )
-        st.markdown(
-            "<div class='document-list'>" + "".join(document_rows) + "</div>",
-            unsafe_allow_html=True,
-        )
         default_document = next(
             (doc for doc in indexed_documents if doc.get("source_file") == DEFAULT_DEMO_DOCUMENT),
             None,
@@ -770,6 +819,7 @@ with st.sidebar:
             doc["document_id"]: f"{doc.get('source_file') or doc['document_id']} ({doc.get('classification') or 'unknown'})"
             for doc in indexed_documents
         }
+        st.markdown("#### Select source")
         selected_document_id = st.selectbox(
             "Active source",
             options=list(document_options.keys()),
@@ -792,7 +842,7 @@ with st.sidebar:
             st.session_state.pending_refinement = None
             st.rerun()
     else:
-        st.caption("No indexed documents are available for this workspace.")
+        st.caption("No documents are available to your role.")
 
     if st.session_state.active_document_id:
         st.markdown("#### Active document")
@@ -906,21 +956,6 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
-# --- Session state setup ---------------------------------------------
-# st.session_state persists across Streamlit's top-to-bottom re-runs
-# (see explanation above). We initialize both values ONLY if they don't
-# already exist yet — this check matters because this init code runs on
-# EVERY re-run, and we don't want to wipe existing chat history just
-# because the script ran again.
-if "messages" not in st.session_state:
-    st.session_state.messages = []  # list of {"role": ..., "content": ...}
-
-if "thread_id" not in st.session_state:
-    st.session_state.thread_id = None  # None until the backend gives us one
-
-if "pending_refinement" not in st.session_state:
-    st.session_state.pending_refinement = None
-
 identity_changed = (
     "active_principal" in st.session_state
     and st.session_state.active_principal != active_principal
@@ -1011,12 +1046,20 @@ shield_icon = (
     'aria-hidden="true"><path d="M12 3 19 6v5c0 4.6-2.8 8-7 10-4.2-2-7-5.4-7-10V6l7-3Z"/>'
     '<path d="m9 12 2 2 4-4"/></svg>'
 )
+active_document_pill = (
+    "<p class='active-document-pill'>ACTIVE SOURCE · "
+    f"{escape(st.session_state.active_document_filename or 'Selected document')}"
+    "</p>"
+    if st.session_state.active_document_id
+    else ""
+)
 st.markdown(
     "<div class='portal-heading'>"
     "<div class='hero-copy'>"
     "<p class='portal-kicker'>KNOWLEDGE WORKSPACE</p>"
     "<h1>Knowledge Management Portal</h1>"
     "<p class='portal-subtitle'>Enterprise Knowledge Workspace · Find answers across your authorized documents.</p>"
+    f"{active_document_pill}"
     f"<div class='trust-strip'>{trust_pills}</div>"
     "</div>"
     "<div class='hero-art' aria-hidden='true'>"
@@ -1041,10 +1084,6 @@ if not st.session_state.messages:
             unsafe_allow_html=True,
         )
         if st.session_state.active_document_id:
-            st.markdown(
-                "<p class='portal-kicker'>SUGGESTED PROMPTS</p>",
-                unsafe_allow_html=True,
-            )
             suggested_question = None
             suggested_questions = (
                 "Summarize the selected document.",
@@ -1052,15 +1091,20 @@ if not st.session_state.messages:
                 "Explain a documented technical issue.",
                 "Compare two topics covered by the available sources.",
             )
-            prompt_columns = st.columns(2)
-            for index, question in enumerate(suggested_questions):
-                if prompt_columns[index % 2].button(
-                    question,
-                    key=f"suggested-question-{index}",
-                    use_container_width=True,
-                    type="secondary",
-                ):
-                    suggested_question = question
+            with st.container(key="suggested-prompts"):
+                st.markdown(
+                    "<p class='portal-kicker'>SUGGESTED PROMPTS</p>",
+                    unsafe_allow_html=True,
+                )
+                prompt_columns = st.columns(2)
+                for index, question in enumerate(suggested_questions):
+                    if prompt_columns[index % 2].button(
+                        question,
+                        key=f"suggested-question-{index}",
+                        use_container_width=True,
+                        type="secondary",
+                    ):
+                        suggested_question = question
         else:
             suggested_question = None
             st.info(
@@ -1113,12 +1157,33 @@ for message_index, message in enumerate(st.session_state.messages):
             st.rerun()
 
 # --- Handle new user input --------------------------------------------
-# st.chat_input() returns None on most re-runs, and only returns the
-# typed text on the run where the user actually hit enter.
-user_input = st.chat_input(
-    "Ask a question about the selected document...",
-    disabled=not st.session_state.active_document_id,
-)
+# Use a regular form for the first prompt so Streamlit does not auto-scroll the
+# empty workspace to the bottom on initial load. Chat history keeps chat_input's
+# pinned composer behavior once there is an answer to follow.
+if st.session_state.messages:
+    user_input = st.chat_input(
+        "Ask a question about the selected document...",
+        disabled=not st.session_state.active_document_id,
+    )
+else:
+    with st.form("initial-prompt", clear_on_submit=True, border=False):
+        prompt_column, submit_column = st.columns([6, 1], vertical_alignment="bottom")
+        with prompt_column:
+            initial_prompt = st.text_input(
+                "Ask a question about the selected document...",
+                label_visibility="collapsed",
+                disabled=not st.session_state.active_document_id,
+            )
+        with submit_column:
+            submitted = st.form_submit_button(
+                "Send",
+                type="primary",
+                icon=":material/send:",
+                use_container_width=True,
+                disabled=not st.session_state.active_document_id,
+            )
+    user_input = initial_prompt if submitted else None
+
 if suggested_question is not None:
     user_input = suggested_question
 
@@ -1143,11 +1208,7 @@ if user_input:
                 response.raise_for_status()
                 data = response.json()
             except requests.RequestException as exc:
-                status = exc.response.status_code if exc.response is not None else "connection error"
-                st.error(
-                    f"The backend request failed ({status}). "
-                    "Check the FastAPI terminal for the underlying error."
-                )
+                st.error(backend_request_error(exc))
                 st.stop()
 
         if data.get("blocked"):
@@ -1217,11 +1278,7 @@ def refine_answer_dialog() -> None:
                 response.raise_for_status()
                 data = response.json()
         except requests.RequestException as exc:
-            status = exc.response.status_code if exc.response is not None else "connection error"
-            st.error(
-                f"The backend request failed ({status}). "
-                "Check the FastAPI terminal for the underlying error."
-            )
+            st.error(backend_request_error(exc))
             return
 
         if data.get("blocked"):

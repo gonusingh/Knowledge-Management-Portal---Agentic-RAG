@@ -172,6 +172,30 @@ class DocumentAuthorizationTests(unittest.TestCase):
                         {chunk["chunk_id"] for chunk in results},
                     )
 
+    def test_document_listing_hides_sources_outside_the_users_acl(self) -> None:
+        expected = {
+            "alice": {"public.txt", "mixed.txt"},
+            "bob": {"public.txt", "internal.txt", "mixed.txt"},
+            "carol": {
+                "public.txt",
+                "internal.txt",
+                "confidential.txt",
+                "restricted.txt",
+                "mixed.txt",
+            },
+        }
+
+        for user_key, user in DEMO_USERS.items():
+            with self.subTest(user=user_key):
+                documents = vector_search.list_documents(
+                    tenant=user.tenant,
+                    user=user,
+                )
+                self.assertEqual(
+                    {document["source_file"] for document in documents},
+                    expected[user_key],
+                )
+
     def test_handbook_demo_document_has_three_trusted_role_levels(self) -> None:
         document_path = (
             Path(__file__).parents[1]
