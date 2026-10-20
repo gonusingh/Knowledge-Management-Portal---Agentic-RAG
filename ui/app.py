@@ -555,11 +555,15 @@ st.markdown(
         background: var(--portal-panel);
     }
     body:has([data-testid="stChatInput"]:focus-within)
-    [data-testid="st-key-suggested-prompts"] {
+    [data-testid="stVerticalBlock"][class*="st-key-suggested-prompts"] {
         display: none;
     }
     body:has([data-testid="stForm"] [data-testid="stTextInput"] input:focus)
-    [data-testid="st-key-suggested-prompts"] {
+    [data-testid="stVerticalBlock"][class*="st-key-suggested-prompts"] {
+        display: none;
+    }
+    body:has([data-testid="stForm"] [data-testid="stTextInput"] input:not(:placeholder-shown))
+    [data-testid="stVerticalBlock"][class*="st-key-suggested-prompts"] {
         display: none;
     }
     [data-testid="stChatInputSubmitButton"] {
